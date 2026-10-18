@@ -1,6 +1,7 @@
 package regruapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 )
@@ -82,4 +83,42 @@ func (c Credentials) redactErr(err error) error {
 		return err
 	}
 	return &redactedError{msg: red, err: err}
+}
+
+func (c Credentials) redactValue(v any) any {
+	switch t := v.(type) {
+	case string:
+		return c.redact(t)
+	case []any:
+		for i := range t {
+			t[i] = c.redactValue(t[i])
+		}
+		return t
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[c.redact(k)] = c.redactValue(val)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+func (c Credentials) redactParams(raw json.RawMessage) json.RawMessage {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil || dec.More() {
+		b, _ := json.Marshal(c.redact(string(raw)))
+		return b
+	}
+	b, err := json.Marshal(c.redactValue(v))
+	if err != nil {
+		return nil
+	}
+	return b
 }

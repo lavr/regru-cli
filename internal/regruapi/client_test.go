@@ -269,3 +269,57 @@ func TestLimiterCancel(t *testing.T) {
 		t.Fatalf("requests %d", n.Load())
 	}
 }
+
+func TestParamsRedactedAnyEscaping(t *testing.T) {
+	payload := `{"result":"error","error_code":"X","error_text":"t","error_params":{"a\/b-пароль":"v","list":["x a\/b-пароль y",{"n":"a/b-пароль"}],"num":5}}`
+	srv, _ := newServer(t, body(payload))
+	pw := "a/b-пароль"
+	c := New(Credentials{Username: "u", Password: pw}, NewLimiter(0, newFakeClock()), WithBaseURL(srv.URL), WithClock(newFakeClock()))
+	_, err := c.Call(context.Background(), Read, "nop", nil)
+	var ae *APIError
+	if !errors.As(err, &ae) {
+		t.Fatalf("err %v", err)
+	}
+	forms := []string{pw, "a/b", `a\/b`, "пароль", `п`, `п`}
+	for _, f := range forms {
+		if strings.Contains(string(ae.Params), f) || strings.Contains(err.Error(), f) {
+			t.Fatalf("leak of %q: %s", f, ae.Params)
+		}
+	}
+	var decoded any
+	if err := json.Unmarshal(ae.Params, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case string:
+			if strings.Contains(x, pw) {
+				t.Fatalf("decoded leak %q", x)
+			}
+		case []any:
+			for _, e := range x {
+				walk(e)
+			}
+		case map[string]any:
+			for k, e := range x {
+				walk(k)
+				walk(e)
+			}
+		}
+	}
+	walk(decoded)
+	if !strings.Contains(string(ae.Params), "***") {
+		t.Fatalf("params %s", ae.Params)
+	}
+}
+
+func TestParamsInvalidJSONRedacted(t *testing.T) {
+	srv, _ := newServer(t, body(`{"result":"error","error_code":"X","error_params":"s3cr3t-pass"}`))
+	c := testClient(srv.URL, newFakeClock())
+	_, err := c.Call(context.Background(), Read, "nop", nil)
+	var ae *APIError
+	if !errors.As(err, &ae) || strings.Contains(string(ae.Params), "s3cr3t-pass") {
+		t.Fatalf("err %v", err)
+	}
+}

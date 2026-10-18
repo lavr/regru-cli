@@ -174,10 +174,7 @@ func (c *Client) once(ctx context.Context, kind Kind, method, target, encoded st
 		ae := &APIError{
 			Code:   c.cr.redact(env.ErrorCode),
 			Text:   c.cr.redact(env.ErrorText),
-			Params: json.RawMessage(c.cr.redact(string(env.ErrorParams))),
-		}
-		if len(env.ErrorParams) == 0 {
-			ae.Params = nil
+			Params: c.cr.redactParams(env.ErrorParams),
 		}
 		return nil, ae.Code == "SERVICE_UNAVAILABLE" && kind == Read, ae
 	default:
