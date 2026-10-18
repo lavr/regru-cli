@@ -92,10 +92,10 @@ func TestFromAPICAA(t *testing.T) {
 			t.Fatalf("missing %v in %v", r, o.Snapshot.Records)
 		}
 	}
-	if s := o.Selectors[issue]; s != (Selector{Priority: "0", Content: "0 issue \"a.example.net\""}) {
+	if s := o.Selectors[issue]; s != (Selector{Subdomain: "caa1.probe", Priority: "0", Content: "0 issue \"a.example.net\""}) {
 		t.Fatalf("issue selector %#v", s)
 	}
-	if s := o.Selectors[wild]; s != (Selector{Priority: "0", Content: "0 issuewild \"a.example.net\""}) {
+	if s := o.Selectors[wild]; s != (Selector{Subdomain: "caa1.probe", Priority: "0", Content: "0 issuewild \"a.example.net\""}) {
 		t.Fatalf("issuewild selector %#v", s)
 	}
 }
@@ -107,7 +107,7 @@ func TestFromAPICAAEscaped(t *testing.T) {
 	if !hasRecord(o.Snapshot, r) {
 		t.Fatalf("records %v raw %v", o.Snapshot.Records, o.Snapshot.Raw)
 	}
-	if s := o.Selectors[r]; s != (Selector{Priority: "0", Content: content}) {
+	if s := o.Selectors[r]; s != (Selector{Subdomain: "c", Priority: "0", Content: content}) {
 		t.Fatalf("selector %#v", s)
 	}
 }
@@ -127,7 +127,7 @@ func TestFromAPISRV(t *testing.T) {
 	if !hasRecord(o.Snapshot, r) {
 		t.Fatalf("records %v", o.Snapshot.Records)
 	}
-	if s := o.Selectors[r]; s != (Selector{Priority: "10", Content: "5 5060 sip.example.net."}) {
+	if s := o.Selectors[r]; s != (Selector{Subdomain: "_s1._tcp.probe", Priority: "10", Content: "5 5060 sip.example.net."}) {
 		t.Fatalf("selector %#v", s)
 	}
 }
@@ -152,10 +152,10 @@ func TestFromAPINonCanonical(t *testing.T) {
 	o := mustFromAPI(t, synthetic(rr("m", "MX", "MX-A.Example.NET.", ip(10)), rr("v6", "AAAA", "2001:DB8:0::1", nil)))
 	mx := zone.Record{Name: "m", Type: zone.MX, Value: "10 mx-a.example.net."}
 	aaaa := zone.Record{Name: "v6", Type: zone.AAAA, Value: "2001:db8::1"}
-	if s := o.Selectors[mx]; s != (Selector{Priority: "10", Content: "MX-A.Example.NET."}) {
+	if s := o.Selectors[mx]; s != (Selector{Subdomain: "m", Priority: "10", Content: "MX-A.Example.NET."}) {
 		t.Fatalf("mx selector %#v records %v", s, o.Snapshot.Records)
 	}
-	if s := o.Selectors[aaaa]; s != (Selector{Priority: "0", Content: "2001:DB8:0::1"}) {
+	if s := o.Selectors[aaaa]; s != (Selector{Subdomain: "v6", Priority: "0", Content: "2001:DB8:0::1"}) {
 		t.Fatalf("aaaa selector %#v records %v", s, o.Snapshot.Records)
 	}
 	if !hasRecord(o.Snapshot, mx) || !hasRecord(o.Snapshot, aaaa) {
@@ -178,7 +178,7 @@ func TestFromAPIAmbiguousDifferentContent(t *testing.T) {
 	if len(o.Snapshot.Records) != 1 || len(o.Selectors) != 1 {
 		t.Fatalf("records %v", o.Snapshot.Records)
 	}
-	if o.Selectors[zone.Record{Name: "m", Type: zone.MX, Value: "10 other.example.net."}] != (Selector{Priority: "10", Content: "other.example.net."}) {
+	if o.Selectors[zone.Record{Name: "m", Type: zone.MX, Value: "10 other.example.net."}] != (Selector{Subdomain: "m", Priority: "10", Content: "other.example.net."}) {
 		t.Fatalf("selectors %v", o.Selectors)
 	}
 	if len(o.Snapshot.Raw) != 2 {
@@ -255,14 +255,19 @@ func TestFromAPIHTTPS(t *testing.T) {
 	}
 }
 
-func TestFromAPINonCanonicalSubnameHasNoSelector(t *testing.T) {
+func TestFromAPINonCanonicalSubnameKeepsObservedSubdomain(t *testing.T) {
 	o := mustFromAPI(t, synthetic(rr("WWW", "A", "192.0.2.5", ip(0))))
 	r := zone.Record{Name: "www", Type: zone.A, Value: "192.0.2.5"}
 	if !hasRecord(o.Snapshot, r) {
 		t.Fatalf("records %v", o.Snapshot.Records)
 	}
-	if _, ok := o.Selectors[r]; ok {
-		t.Fatalf("selector for non-canonical subname: %v", o.Selectors)
+	s, ok := o.Selectors[r]
+	if !ok || s != (Selector{Subdomain: "WWW", Priority: "0", Content: "192.0.2.5"}) {
+		t.Fatalf("selector %#v %v", s, ok)
+	}
+	fn, params := RemoveCall(r, s)
+	if fn != "remove_record" || params["subdomain"] != "WWW" || params["record_type"] != "A" || params["priority"] != "0" || params["content"] != "192.0.2.5" {
+		t.Fatalf("%s %v", fn, params)
 	}
 }
 
@@ -296,7 +301,7 @@ func TestSelectorsMatchProbes(t *testing.T) {
 			t.Fatalf("%s: %d selectors, %d records, %d rrs", name, len(o.Selectors), len(o.Snapshot.Records), len(z.RRs))
 		}
 		for _, x := range z.RRs {
-			want := Selector{Priority: "0", Content: x.Content}
+			want := Selector{Subdomain: x.Subname, Priority: "0", Content: x.Content}
 			if x.Prio.Valid {
 				want.Priority = itoa(x.Prio.Value)
 			}

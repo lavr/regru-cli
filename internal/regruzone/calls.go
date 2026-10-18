@@ -17,8 +17,9 @@ func (e *Error) Error() string { return e.CodeValue + ": " + e.Msg }
 func (e *Error) Code() string { return e.CodeValue }
 
 type Selector struct {
-	Priority string
-	Content  string
+	Subdomain string
+	Priority  string
+	Content   string
 }
 
 var caaTags = map[string]bool{"issue": true, "issuewild": true, "iodef": true}
@@ -73,7 +74,7 @@ func AddCall(r zone.Record) (string, map[string]string, error) {
 
 func RemoveCall(r zone.Record, s Selector) (string, map[string]string) {
 	return "remove_record", map[string]string{
-		"subdomain":   r.Name,
+		"subdomain":   s.Subdomain,
 		"record_type": string(r.Type),
 		"priority":    s.Priority,
 		"content":     s.Content,

@@ -44,10 +44,9 @@ func FromAPI(zoneName string, z regruapi.ZoneRecords) (Observed, error) {
 	}
 
 	type parsed struct {
-		rr    regruapi.RR
-		name  string
-		rec   zone.Record
-		exact bool
+		rr   regruapi.RR
+		name string
+		rec  zone.Record
 	}
 	var raws []rawKey
 	var order []zone.Record
@@ -61,7 +60,7 @@ func FromAPI(zoneName string, z regruapi.ZoneRecords) (Observed, error) {
 		if _, seen := groups[rec]; !seen {
 			order = append(order, rec)
 		}
-		groups[rec] = append(groups[rec], parsed{rr: rr, name: name, rec: rec, exact: name == rr.Subname})
+		groups[rec] = append(groups[rec], parsed{rr: rr, name: name, rec: rec})
 	}
 	for _, rec := range order {
 		g := groups[rec]
@@ -72,9 +71,7 @@ func FromAPI(zoneName string, z regruapi.ZoneRecords) (Observed, error) {
 			continue
 		}
 		o.Snapshot.Records = append(o.Snapshot.Records, rec)
-		if g[0].exact {
-			o.Selectors[rec] = selectorOf(g[0].rr)
-		}
+		o.Selectors[rec] = selectorOf(g[0].rr)
 	}
 
 	counts := map[rawKey]int{}
@@ -97,7 +94,7 @@ func FromAPI(zoneName string, z regruapi.ZoneRecords) (Observed, error) {
 }
 
 func selectorOf(rr regruapi.RR) Selector {
-	s := Selector{Priority: "0", Content: rr.Content}
+	s := Selector{Subdomain: rr.Subname, Priority: "0", Content: rr.Content}
 	if rr.Prio.Valid {
 		s.Priority = strconv.Itoa(rr.Prio.Value)
 	}

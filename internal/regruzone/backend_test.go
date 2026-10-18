@@ -256,3 +256,23 @@ func TestBackendDomainErrorPassthrough(t *testing.T) {
 		t.Fatalf("err %T %v", err, err)
 	}
 }
+
+func TestBackendRemoveUsesObservedSubdomain(t *testing.T) {
+	reply := `{"result":"success","answer":{"domains":[{"dname":"example.test","result":"success","service_id":"1000001","rrs":[{"subname":"WWW","rectype":"A","content":"192.0.2.5","prio":0,"state":"A"}]}]}}`
+	b, f := newBackend(t, byPath(t, map[string]string{
+		"/zone/get_resource_records": reply,
+		"/zone/remove_record":        "zone_remove_record_success",
+	}))
+	ctx := context.Background()
+	if _, _, err := b.Snapshot(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Remove(ctx, zone.Record{Name: "www", Type: zone.A, Value: "192.0.2.5"}); err != nil {
+		t.Fatal(err)
+	}
+	c := f.recorded()
+	last := c[len(c)-1]
+	if last.Path != "/zone/remove_record" || last.Input["subdomain"] != "WWW" || last.Input["content"] != "192.0.2.5" || last.Input["priority"] != "0" || last.Input["record_type"] != "A" {
+		t.Fatalf("%v", last)
+	}
+}

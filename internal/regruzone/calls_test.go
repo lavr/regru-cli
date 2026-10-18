@@ -86,12 +86,12 @@ func TestValidateWrite(t *testing.T) {
 
 func TestRemoveCall(t *testing.T) {
 	r := zone.Record{Name: "caa1.probe", Type: zone.CAA, Value: "0 issue a.example.net"}
-	fn, params := RemoveCall(r, Selector{Priority: "0", Content: "0 issue \"a.example.net\""})
+	fn, params := RemoveCall(r, Selector{Subdomain: "caa1.probe", Priority: "0", Content: "0 issue \"a.example.net\""})
 	want := map[string]string{"subdomain": "caa1.probe", "record_type": "CAA", "priority": "0", "content": "0 issue \"a.example.net\""}
 	if fn != "remove_record" || !reflect.DeepEqual(params, want) {
 		t.Fatalf("%s %v", fn, params)
 	}
-	fn, params = RemoveCall(zone.Record{Name: "_s1._tcp.probe", Type: zone.SRV, Value: "10 5 5060 sip.example.net."}, Selector{Priority: "10", Content: "5 5060 sip.example.net."})
+	fn, params = RemoveCall(zone.Record{Name: "_s1._tcp.probe", Type: zone.SRV, Value: "10 5 5060 sip.example.net."}, Selector{Subdomain: "_s1._tcp.probe", Priority: "10", Content: "5 5060 sip.example.net."})
 	want = map[string]string{"subdomain": "_s1._tcp.probe", "record_type": "SRV", "priority": "10", "content": "5 5060 sip.example.net."}
 	if fn != "remove_record" || !reflect.DeepEqual(params, want) {
 		t.Fatalf("%s %v", fn, params)
