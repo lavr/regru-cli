@@ -160,3 +160,43 @@ func TestValidateReadonlyWritable(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExportWithUnparseableReadonlyRoundTrips(t *testing.T) {
+	s := testSnapshot()
+	s.Records = append(s.Records, zone.Record{Name: "svc", Type: zone.HTTPS, Value: "1 . alpn=h3"})
+	out, err := ExportManifest("acc", s, ScopeListed, testRules())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParseManifest(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateManifest(m, testRules()); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range m.Readonly {
+		if r.Type == zone.HTTPS && r.Name == "svc" && r.Value == "1 . alpn=h3" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("readonly: %v", m.Readonly)
+	}
+}
+
+func TestParseReadonlyNonASCIITXT(t *testing.T) {
+	doc := head + "scope: listed-rrsets\nrrsets: []\nreadonly:\n  rrsets:\n    - {name: \"@\", type: TXT, values: [\"café\"]}\n"
+	m, err := ParseManifest([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Readonly) != 1 || m.Readonly[0].Value != "café" {
+		t.Fatalf("readonly: %v", m.Readonly)
+	}
+	_, err = ParseManifest([]byte(head + "scope: listed-rrsets\nrrsets:\n  - {name: www, type: TXT, values: [\"café\"]}\n"))
+	if codeOf(err) != "invalid_value" {
+		t.Fatalf("desired must stay strict: %v", err)
+	}
+}

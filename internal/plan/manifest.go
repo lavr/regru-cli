@@ -117,7 +117,7 @@ type rrsetEntry struct {
 	values []string
 }
 
-func parseRRsets(n *yaml.Node, zoneName, path string) ([]rrsetEntry, error) {
+func parseRRsets(n *yaml.Node, zoneName, path string, strict bool) ([]rrsetEntry, error) {
 	if n.Kind != yaml.SequenceNode {
 		return nil, fail("%s must be a list", path)
 	}
@@ -162,7 +162,10 @@ func parseRRsets(n *yaml.Node, zoneName, path string) ([]rrsetEntry, error) {
 			}
 			nv, err := zone.ParseValue(t, v.Value)
 			if err != nil {
-				return nil, err
+				if strict {
+					return nil, err
+				}
+				nv = v.Value
 			}
 			if seenVal[nv] {
 				return nil, manifestErr("duplicate", "%s: repeated value %q", p, nv)
@@ -282,7 +285,7 @@ func ParseManifest(b []byte) (Manifest, error) {
 	if !ok || isNull(rn) {
 		return Manifest{}, fail("manifest.rrsets is required")
 	}
-	entries, err := parseRRsets(rn, zoneName, "rrsets")
+	entries, err := parseRRsets(rn, zoneName, "rrsets", true)
 	if err != nil {
 		return Manifest{}, err
 	}
@@ -300,7 +303,7 @@ func ParseManifest(b []byte) (Manifest, error) {
 			return Manifest{}, err
 		}
 		if n, ok := rm["rrsets"]; ok && !isNull(n) {
-			es, err := parseRRsets(n, zoneName, "readonly.rrsets")
+			es, err := parseRRsets(n, zoneName, "readonly.rrsets", false)
 			if err != nil {
 				return Manifest{}, err
 			}
