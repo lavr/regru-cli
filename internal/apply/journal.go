@@ -54,7 +54,7 @@ func syncDir(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	return d.Sync()
 }
 
@@ -75,11 +75,11 @@ func OpenJournal(stateDir, userID, zoneName, runID string) (*FileJournal, error)
 		return nil, err
 	}
 	if err := f.Chmod(0o600); err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, err
 	}
 	if err := syncDir(dir); err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, err
 	}
 	return &FileJournal{f: f, path: path, runID: runID}, nil

@@ -684,7 +684,7 @@ func TestResultWriteFailsOnLastOpJournalNotRotated(t *testing.T) {
 type finishFails struct{ *FileJournal }
 
 func (j finishFails) Finish(string, any) error {
-	if err := j.FileJournal.Close(); err != nil {
+	if err := j.Close(); err != nil {
 		return err
 	}
 	return errors.New("disk full")

@@ -129,7 +129,7 @@ func t13JournalLines(t *testing.T, d *Deps) []map[string]any {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var out []map[string]any
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {

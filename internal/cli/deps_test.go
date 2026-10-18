@@ -461,9 +461,15 @@ func TestFakeAPIShapes(t *testing.T) {
 	api := newFakeAPI(t)
 	b := fakeBackend(t, api)
 	ctx := context.Background()
-	b.Add(ctx, zone.Record{Name: "v6", Type: zone.AAAA, Value: "2001:db8::1"})
-	b.Add(ctx, zone.Record{Name: "_s._tcp", Type: zone.SRV, Value: "10 5 5060 sip.example.net."})
-	b.Add(ctx, zone.Record{Name: "caa", Type: zone.CAA, Value: "0 issue a.example.net"})
+	for _, r := range []zone.Record{
+		{Name: "v6", Type: zone.AAAA, Value: "2001:db8::1"},
+		{Name: "_s._tcp", Type: zone.SRV, Value: "10 5 5060 sip.example.net."},
+		{Name: "caa", Type: zone.CAA, Value: "0 issue a.example.net"},
+	} {
+		if err := b.Add(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
 	byType := map[string]fakeRR{}
 	for _, r := range api.records("example.test") {
 		byType[r.Rectype] = r

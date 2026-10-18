@@ -160,9 +160,9 @@ func TestMutateAmbiguous(t *testing.T) {
 func TestZoneMutateSuccess(t *testing.T) {
 	var path, data string
 	srv, _ := newServer(t, func(n int, w http.ResponseWriter, r *http.Request) {
-		r.ParseForm()
+		parseForm(t, r)
 		path, data = r.URL.Path, r.PostForm.Get("input_data")
-		w.Write([]byte(loadFixture(t, "zone_add_txt_success")))
+		writeBody(t, w, loadFixture(t, "zone_add_txt_success"))
 	})
 	c := testClient(srv.URL, newFakeClock())
 	err := c.ZoneMutate(context.Background(), "add_txt", "example.test", map[string]string{"subdomain": "a", "text": "b"})
@@ -245,7 +245,7 @@ func TestIsPartnerFalse(t *testing.T) {
 	var path string
 	srv, _ := newServer(t, func(n int, w http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
-		w.Write([]byte(`{"result":"error","error_code":"RESELLER_AUTH_FAILED","error_text":"x","error_params":{}}`))
+		writeBody(t, w, `{"result":"error","error_code":"RESELLER_AUTH_FAILED","error_text":"x","error_params":{}}`)
 	})
 	c := testClient(srv.URL, newFakeClock())
 	ok, err := c.IsPartner(context.Background())
@@ -258,7 +258,7 @@ func TestIsPartnerTrue(t *testing.T) {
 	var path string
 	srv, _ := newServer(t, func(n int, w http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
-		w.Write([]byte(okResp(`{}`)))
+		writeBody(t, w, okResp(`{}`))
 	})
 	c := testClient(srv.URL, newFakeClock())
 	ok, err := c.IsPartner(context.Background())
@@ -280,9 +280,9 @@ func TestIsPartnerOtherError(t *testing.T) {
 func TestListDomains(t *testing.T) {
 	var data string
 	srv, _ := newServer(t, func(n int, w http.ResponseWriter, r *http.Request) {
-		r.ParseForm()
+		parseForm(t, r)
 		data = r.PostForm.Get("input_data")
-		w.Write([]byte(loadFixture(t, "service_get_list_synthetic")))
+		writeBody(t, w, loadFixture(t, "service_get_list_synthetic"))
 	})
 	c := testClient(srv.URL, newFakeClock())
 	svcs, err := c.ListDomains(context.Background())
@@ -311,7 +311,7 @@ func TestListDomainsIncomplete(t *testing.T) {
 
 func nssHandler(t *testing.T, limit int, sizes *[]int) respFn {
 	return func(n int, w http.ResponseWriter, r *http.Request) {
-		r.ParseForm()
+		parseForm(t, r)
 		var in struct {
 			Domains []struct {
 				Dname string `json:"dname"`
@@ -322,14 +322,14 @@ func nssHandler(t *testing.T, limit int, sizes *[]int) respFn {
 		}
 		*sizes = append(*sizes, len(in.Domains))
 		if len(in.Domains) > limit {
-			w.Write([]byte(`{"result":"error","error_code":"TOO_MANY_OBJECTS_IN_ONE_REQUEST","error_text":"x","error_params":{}}`))
+			writeBody(t, w, `{"result":"error","error_code":"TOO_MANY_OBJECTS_IN_ONE_REQUEST","error_text":"x","error_params":{}}`)
 			return
 		}
 		var items []string
 		for _, d := range in.Domains {
 			items = append(items, fmt.Sprintf(`{"dname":%q,"service_id":"s-%s","nss":[{"ns":"ns1.reg.ru"}]}`, d.Dname, d.Dname))
 		}
-		w.Write([]byte(okResp(`{"domains":[` + strings.Join(items, ",") + `]}`)))
+		writeBody(t, w, okResp(`{"domains":[`+strings.Join(items, ",")+`]}`))
 	}
 }
 

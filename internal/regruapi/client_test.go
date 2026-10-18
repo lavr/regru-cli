@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -44,7 +45,7 @@ func newServer(t *testing.T, fn respFn) (*httptest.Server, *atomic.Int32) {
 
 func body(s string) respFn {
 	return func(n int, w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(s))
+		_, _ = io.WriteString(w, s)
 	}
 }
 
@@ -58,9 +59,9 @@ func TestCallFormShape(t *testing.T) {
 	var form url.Values
 	srv, _ := newServer(t, func(n int, w http.ResponseWriter, r *http.Request) {
 		gotPath, gotQuery, gotMethod = r.URL.Path, r.URL.RawQuery, r.Method
-		r.ParseForm()
+		parseForm(t, r)
 		form = r.PostForm
-		w.Write([]byte(loadFixture(t, "nop_success")))
+		writeBody(t, w, loadFixture(t, "nop_success"))
 	})
 	c := testClient(srv.URL, newFakeClock())
 	ans, err := c.Call(context.Background(), Read, "nop", map[string]any{"domain_name": "example.test"})
@@ -99,10 +100,10 @@ func TestReadRetriesOnHTML(t *testing.T) {
 	ok := ""
 	srv, n := newServer(t, func(i int, w http.ResponseWriter, r *http.Request) {
 		if i < 3 {
-			w.Write([]byte("<html>"))
+			writeBody(t, w, "<html>")
 			return
 		}
-		w.Write([]byte(ok))
+		writeBody(t, w, ok)
 	})
 	ok = loadFixture(t, "nop_success")
 	clk := newFakeClock()
@@ -135,7 +136,7 @@ func TestReadMaxAttempts(t *testing.T) {
 func TestRead5xxWithSuccessBody(t *testing.T) {
 	srv, n := newServer(t, func(i int, w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(502)
-		w.Write([]byte(`{"result":"success"}`))
+		writeBody(t, w, `{"result":"success"}`)
 	})
 	c := testClient(srv.URL, newFakeClock())
 	_, err := c.Call(context.Background(), Read, "nop", nil)
@@ -321,5 +322,19 @@ func TestParamsInvalidJSONRedacted(t *testing.T) {
 	var ae *APIError
 	if !errors.As(err, &ae) || strings.Contains(string(ae.Params), "s3cr3t-pass") {
 		t.Fatalf("err %v", err)
+	}
+}
+
+func writeBody(t *testing.T, w io.Writer, s string) {
+	t.Helper()
+	if _, err := io.WriteString(w, s); err != nil {
+		t.Error(err)
+	}
+}
+
+func parseForm(t *testing.T, r *http.Request) {
+	t.Helper()
+	if err := r.ParseForm(); err != nil {
+		t.Error(err)
 	}
 }

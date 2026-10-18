@@ -232,7 +232,7 @@ func TestFromAPIBadSOA(t *testing.T) {
 
 func TestFromAPINoSOA(t *testing.T) {
 	o := mustFromAPI(t, synthetic())
-	if o.Snapshot.SOA != nil || o.Snapshot.Records != nil && len(o.Snapshot.Records) != 0 {
+	if o.Snapshot.SOA != nil || len(o.Snapshot.Records) != 0 {
 		t.Fatalf("%#v", o.Snapshot)
 	}
 }

@@ -47,7 +47,11 @@ func TestJournalPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer j.Close()
+	defer func() {
+		if err := j.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	if !regexp.MustCompile(`/journal/42/example\.test/\d{8}T\d{6}Z-abcd\.jsonl$`).MatchString(j.Path()) {
 		t.Fatalf("path %s", j.Path())
 	}

@@ -114,11 +114,11 @@ func savePlan(path string, p plan.Prepared) error {
 		return err
 	}
 	if err := f.Chmod(0o600); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	if _, err := f.Write(buf.Bytes()); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	return f.Close()

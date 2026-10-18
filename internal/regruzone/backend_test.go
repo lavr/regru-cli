@@ -39,21 +39,28 @@ type call struct {
 }
 
 type fakeAPI struct {
+	t     *testing.T
 	mu    sync.Mutex
 	calls []call
 	reply func(path string) (int, string)
 }
 
 func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		f.t.Error(err)
+	}
 	var in map[string]any
-	json.Unmarshal([]byte(r.PostForm.Get("input_data")), &in)
+	if err := json.Unmarshal([]byte(r.PostForm.Get("input_data")), &in); err != nil {
+		f.t.Error(err)
+	}
 	f.mu.Lock()
 	f.calls = append(f.calls, call{Path: r.URL.Path, Input: in})
 	f.mu.Unlock()
 	code, body := f.reply(r.URL.Path)
 	w.WriteHeader(code)
-	w.Write([]byte(body))
+	if _, err := w.Write([]byte(body)); err != nil {
+		f.t.Error(err)
+	}
 }
 
 func (f *fakeAPI) recorded() []call {
@@ -64,7 +71,7 @@ func (f *fakeAPI) recorded() []call {
 
 func newBackend(t *testing.T, reply func(path string) (int, string)) (*Backend, *fakeAPI) {
 	t.Helper()
-	f := &fakeAPI{reply: reply}
+	f := &fakeAPI{t: t, reply: reply}
 	srv := httptest.NewServer(http.HandlerFunc(f.handler))
 	t.Cleanup(srv.Close)
 	clk := &fakeClock{now: time.Unix(1000, 0)}

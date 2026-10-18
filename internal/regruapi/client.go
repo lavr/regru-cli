@@ -149,7 +149,7 @@ func (c *Client) once(ctx context.Context, kind Kind, method, target, encoded st
 		}
 		return fail(err, !errors.Is(err, errRedirectRefused))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	if err != nil {
 		if ctx.Err() != nil && kind == Read {

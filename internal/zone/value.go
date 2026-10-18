@@ -92,7 +92,7 @@ func ParseValue(t Type, s string) (string, error) {
 		tag := f[1]
 		for i := 0; i < len(tag); i++ {
 			c := tag[i]
-			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9') {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') {
 				return fail("tag must match [a-z0-9]+")
 			}
 		}

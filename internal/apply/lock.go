@@ -36,11 +36,11 @@ func LockZone(stateDir, userID, zoneName string) (func(), error) {
 		return nil, err
 	}
 	if err := f.Chmod(0o600); err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, err
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		f.Close()
+		_ = f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
 			return nil, &LockedError{Zone: zoneName, Path: path}
 		}
@@ -49,8 +49,8 @@ func LockZone(stateDir, userID, zoneName string) (func(), error) {
 	var once sync.Once
 	return func() {
 		once.Do(func() {
-			syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-			f.Close()
+			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			_ = f.Close()
 		})
 	}, nil
 }

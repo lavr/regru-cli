@@ -238,13 +238,13 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	var input map[string]any
 	if r.PostForm.Get("input_format") != "json" {
-		w.Write(fakeError("INVALID_INPUT_FORMAT", "input_format must be json"))
+		f.reply(w, fakeError("INVALID_INPUT_FORMAT", "input_format must be json"))
 		return
 	}
 	dec := json.NewDecoder(strings.NewReader(r.PostForm.Get("input_data")))
 	dec.UseNumber()
 	if err := dec.Decode(&input); err != nil {
-		w.Write(fakeError("INPUT_DATA_PARSE_ERROR", "input_data is not json"))
+		f.reply(w, fakeError("INPUT_DATA_PARSE_ERROR", "input_data is not json"))
 		return
 	}
 	if _, ok := input["username"]; ok {
@@ -285,12 +285,20 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		conn, _, err := hj.Hijack()
 		if err == nil {
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				f.t.Errorf("fakeAPI: close hijacked connection: %v", err)
+			}
 		}
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(body)
+	f.reply(w, body)
+}
+
+func (f *fakeAPI) reply(w http.ResponseWriter, b []byte) {
+	if _, err := w.Write(b); err != nil {
+		f.t.Errorf("fakeAPI: write reply: %v", err)
+	}
 }
 
 func inStr(in map[string]any, k string) string {
@@ -569,20 +577,6 @@ func withEnv(d *Deps, kv ...string) {
 	d.Env.LookupEnv = func(k string) (string, bool) {
 		if v, ok := extra[k]; ok {
 			return v, true
-		}
-		return prev(k)
-	}
-}
-
-func withoutEnv(d *Deps, keys ...string) {
-	drop := map[string]bool{}
-	for _, k := range keys {
-		drop[k] = true
-	}
-	prev := d.Env.LookupEnv
-	d.Env.LookupEnv = func(k string) (string, bool) {
-		if drop[k] {
-			return "", false
 		}
 		return prev(k)
 	}
