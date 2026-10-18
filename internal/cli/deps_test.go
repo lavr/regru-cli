@@ -562,3 +562,88 @@ func TestFakeAPIModes(t *testing.T) {
 		t.Fatalf("%+v %v", nss, err)
 	}
 }
+
+func TestAutoWithPinnedUsesPinned(t *testing.T) {
+	d := newTestDeps(t, newFakeAPI(t))
+	writeConfig(t, d, twoAccounts)
+	withEnv(d, "A_PW", "pw", "B_PW", "pwb")
+	called := false
+	d.Discover = func(context.Context, *Deps, string, bool) (string, error) {
+		called = true
+		return "a", nil
+	}
+	code, res := probe(t, d, Target{Domain: "example.test", Pinned: "b", Mutating: true}, "--account", "auto")
+	if code != 0 || res.session.Account.Name != "b" || called {
+		t.Fatalf("exit %d, %v, called %v", code, res.err, called)
+	}
+}
+
+func fakeRawAdd(t *testing.T, api *fakeAPI, fn string, params map[string]string) error {
+	t.Helper()
+	d := newTestDeps(t, api)
+	c := d.NewClient(config.Account{Name: "env", Username: "user", Password: "pw"}, d.Limiter, time.Minute)
+	return c.ZoneMutate(context.Background(), fn, "example.test", params)
+}
+
+func TestFakeTXTInvalidCharacters(t *testing.T) {
+	api := newFakeAPI(t)
+	for _, text := range []string{"проверка regru", "tab\there", "del\x7f"} {
+		err := fakeRawAdd(t, api, "add_txt", map[string]string{"subdomain": "txt7.probe", "text": text})
+		var de *regruapi.DomainError
+		if !errors.As(err, &de) || de.Code != "TEXT_CONTAINS_INVALID_CHARACTERS" || de.Domain != "example.test" || string(de.Params) != "{}" {
+			t.Fatalf("%q: %v", text, err)
+		}
+	}
+	if err := fakeRawAdd(t, api, "add_txt", map[string]string{"subdomain": "txt1.probe", "text": "v=spf1 ~all"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(api.records("example.test")); n != len(baselineRRs())+1 {
+		t.Fatalf("%d records", n)
+	}
+}
+
+func TestFakeFailNextMutate(t *testing.T) {
+	api := newFakeAPI(t)
+	api.set(func(f *fakeAPI) { f.failNextMutate = "DOMAIN_BAD_STATE" })
+	err := fakeRawAdd(t, api, "add_alias", map[string]string{"subdomain": "x", "ipaddr": "192.0.2.5"})
+	var de *regruapi.DomainError
+	if !errors.As(err, &de) || de.Code != "DOMAIN_BAD_STATE" {
+		t.Fatalf("%v", err)
+	}
+	if n := len(api.records("example.test")); n != len(baselineRRs()) {
+		t.Fatalf("applied: %d records", n)
+	}
+	if err := fakeRawAdd(t, api, "add_alias", map[string]string{"subdomain": "x", "ipaddr": "192.0.2.5"}); err != nil {
+		t.Fatalf("not cleared: %v", err)
+	}
+	if n := len(api.records("example.test")); n != len(baselineRRs())+1 {
+		t.Fatalf("%d records", n)
+	}
+}
+
+func TestFakeSubnameExactEverywhere(t *testing.T) {
+	api := newFakeAPI(t)
+	if err := fakeRawAdd(t, api, "add_alias", map[string]string{"subdomain": "Mixed", "ipaddr": "192.0.2.5"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := fakeRawAdd(t, api, "add_alias", map[string]string{"subdomain": "mixed", "ipaddr": "192.0.2.5"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := fakeRawAdd(t, api, "add_cname", map[string]string{"subdomain": "MIXED", "canonical_name": "t.example.net."}); err != nil {
+		t.Fatalf("cname conflict must compare exactly: %v", err)
+	}
+	if n := len(api.records("example.test")); n != len(baselineRRs())+3 {
+		t.Fatalf("%d records", n)
+	}
+	rm := map[string]string{"subdomain": "mixed", "record_type": "A", "priority": "0", "content": "192.0.2.5"}
+	if err := fakeRawAdd(t, api, "remove_record", rm); err != nil {
+		t.Fatal(err)
+	}
+	left := map[string]bool{}
+	for _, r := range api.records("example.test") {
+		left[r.Subname] = true
+	}
+	if left["mixed"] || !left["Mixed"] || !left["MIXED"] {
+		t.Fatalf("%v", left)
+	}
+}

@@ -75,7 +75,7 @@ func (r fakeRR) toJSON() map[string]any {
 
 func (r fakeRR) same(o fakeRR) bool {
 	eq := func(a, b *int) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }
-	return strings.EqualFold(r.Subname, o.Subname) && r.Rectype == o.Rectype && r.Content == o.Content &&
+	return r.Subname == o.Subname && r.Rectype == o.Rectype && r.Content == o.Content &&
 		eq(r.Prio, o.Prio) && eq(r.Weight, o.Weight) && eq(r.Port, o.Port)
 }
 
@@ -117,14 +117,15 @@ type fakeAPI struct {
 	Requests  atomic.Int64
 	Mutations atomic.Int64
 
-	mu           sync.Mutex
-	users        map[string]*fakeUser
-	zones        map[string]*fakeZone
-	calls        []fakeCall
-	dropOnMutate bool
-	failNextRead bool
-	onRead       func()
-	hangOn       string
+	mu             sync.Mutex
+	users          map[string]*fakeUser
+	zones          map[string]*fakeZone
+	calls          []fakeCall
+	dropOnMutate   bool
+	failNextRead   bool
+	failNextMutate string
+	onRead         func()
+	hangOn         string
 }
 
 var fakeMutations = map[string]bool{
@@ -398,6 +399,14 @@ func (f *fakeAPI) handle(method, username, password string, in map[string]any) [
 		}
 		d := ds[0]
 		z, ok := f.zones[d]
+		if code := f.failNextMutate; code != "" {
+			f.failNextMutate = ""
+			sid := ""
+			if ok {
+				sid = z.ServiceID
+			}
+			return fakeSuccess(map[string]any{"domains": []any{fakeDomainError(d, sid, code, "Injected failure "+code, map[string]any{})}})
+		}
 		if !ok || !u.owns(d) {
 			return fakeSuccess(map[string]any{"domains": []any{fakeDomainError(d, "", "DOMAIN_NOT_FOUND", "Domain not found", nil)}})
 		}
@@ -475,6 +484,12 @@ func (z *fakeZone) mutate(dname, fn string, in map[string]any) map[string]any {
 		}
 		rr = fakeRR{Subname: sub, Rectype: "MX", Content: inStr(in, "mail_server"), Prio: p}
 	case "add_txt":
+		text := inStr(in, "text")
+		for i := 0; i < len(text); i++ {
+			if text[i] < 0x20 || text[i] > 0x7E {
+				return bad("TEXT_CONTAINS_INVALID_CHARACTERS", "Text contains invalid characters")
+			}
+		}
 		rr = fakeRR{Subname: sub, Rectype: "TXT", Content: inStr(in, "text"), Prio: intp(0)}
 	case "add_ns":
 		rr = fakeRR{Subname: sub, Rectype: "NS", Content: inStr(in, "dns_server"), Prio: intp(0)}
@@ -500,7 +515,7 @@ func (z *fakeZone) mutate(dname, fn string, in map[string]any) map[string]any {
 		return bad("PARAMETER_MISSING", "subdomain and value are required")
 	}
 	for _, cur := range z.RRs {
-		if !strings.EqualFold(cur.Subname, rr.Subname) {
+		if cur.Subname != rr.Subname {
 			continue
 		}
 		if (rr.Rectype == "CNAME") != (cur.Rectype == "CNAME") || (rr.Rectype == "CNAME" && !cur.same(rr)) {

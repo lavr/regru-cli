@@ -154,7 +154,7 @@ func accountErr(code, msg string) *CodedError {
 func (d *Deps) Open(ctx context.Context, s *Settings, t Target) (*Session, error) {
 	sel := s.Selection
 	if t.Pinned != "" {
-		if sel.Explicit && sel.Name != t.Pinned {
+		if sel.Explicit && sel.Name != "auto" && sel.Name != t.Pinned {
 			return nil, accountErr("account_conflict", fmt.Sprintf("account %q was requested, but the plan is bound to account %q", sel.Name, t.Pinned))
 		}
 		sel = config.Selection{Name: t.Pinned, Explicit: true}
