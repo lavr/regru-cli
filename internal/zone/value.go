@@ -75,27 +75,26 @@ func ParseValue(t Type, s string) (string, error) {
 		}
 		return strings.Join(nums, " ") + " " + h, nil
 	case CAA:
-		f := strings.Fields(s)
-		if len(f) < 3 {
-			return fail("expected \"<flags> <tag> <value>\"")
+		rest := strings.Trim(s, " \t")
+		var f [2]string
+		for i := range f {
+			j := strings.IndexAny(rest, " \t")
+			if j < 0 {
+				return fail("expected \"<flags> <tag> <value>\"")
+			}
+			f[i] = rest[:j]
+			rest = strings.TrimLeft(rest[j:], " \t")
 		}
 		fl, err := parseUint(f[0], 255)
 		if err != nil {
 			return fail("flags must be 0..255")
 		}
 		tag := f[1]
-		if tag == "" {
-			return fail("empty tag")
-		}
 		for i := 0; i < len(tag); i++ {
 			c := tag[i]
 			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9') {
 				return fail("tag must match [a-z0-9]+")
 			}
-		}
-		rest := strings.TrimSpace(s)
-		for i := 0; i < 2; i++ {
-			rest = strings.TrimLeft(rest[strings.IndexAny(rest, " \t"):], " \t")
 		}
 		if len(rest) >= 2 && rest[0] == '"' && rest[len(rest)-1] == '"' {
 			rest = rest[1 : len(rest)-1]

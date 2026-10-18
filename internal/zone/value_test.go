@@ -40,6 +40,10 @@ func TestParseValue(t *testing.T) {
 		{SRV, "10 5 sip.example.net."},
 		{CAA, "256 issue x"},
 		{TXT, ""},
+		{CAA, "0\nissue x"},
+		{CAA, "0 issue\nx"},
+		{CAA, "0 issue"},
+		{CAA, "0  "},
 		{TXT, "проверка"},
 		{TXT, "a\tb"},
 	}
