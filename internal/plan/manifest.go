@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 
@@ -28,6 +29,7 @@ type Manifest struct {
 	Zone     string
 	Desired  Desired
 	Readonly []zone.Record
+	RawKeys  []zone.Key
 }
 
 type ManifestError struct {
@@ -186,32 +188,38 @@ func knownType(t zone.Type) bool {
 	return false
 }
 
-func checkRaw(n *yaml.Node, path string) error {
+func checkRaw(n *yaml.Node, path string) ([]zone.Key, error) {
 	if n.Kind != yaml.SequenceNode {
-		return fail("%s must be a list", path)
+		return nil, fail("%s must be a list", path)
 	}
+	var keys []zone.Key
 	for i, item := range n.Content {
 		p := fmt.Sprintf("%s[%d]", path, i)
 		m, err := mapping(item, p, "name", "type", "content", "prio", "count")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, k := range []string{"name", "type", "content"} {
 			n, ok := m[k]
 			if !ok || n.Kind != yaml.ScalarNode || n.Tag != "!!str" {
-				return fail("%s.%s must be a string", p, k)
+				return nil, fail("%s.%s must be a string", p, k)
 			}
 		}
 		if pn, ok := m["prio"]; ok && !isNull(pn) {
 			if _, err := intValue(pn, p+".prio"); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		if _, err := intField(m, p, "count"); err != nil {
-			return err
+			return nil, err
 		}
+		keys = append(keys, rawKeyOf(m["name"].Value, m["type"].Value))
 	}
-	return nil
+	return keys, nil
+}
+
+func rawKeyOf(name, typ string) zone.Key {
+	return zone.Key{Name: name, Type: zone.Type(strings.ToUpper(typ))}
 }
 
 func checkSOA(n *yaml.Node, path string) error {
@@ -314,9 +322,11 @@ func ParseManifest(b []byte) (Manifest, error) {
 			}
 		}
 		if n, ok := rm["raw"]; ok && !isNull(n) {
-			if err := checkRaw(n, "readonly.raw"); err != nil {
+			keys, err := checkRaw(n, "readonly.raw")
+			if err != nil {
 				return Manifest{}, err
 			}
+			m.RawKeys = keys
 		}
 		if n, ok := rm["soa"]; ok && !isNull(n) {
 			if err := checkSOA(n, "readonly.soa"); err != nil {
@@ -328,8 +338,12 @@ func ParseManifest(b []byte) (Manifest, error) {
 }
 
 func ValidateManifest(m Manifest, r Rules) error {
+	mixed := map[zone.Key]bool{}
+	for _, k := range m.RawKeys {
+		mixed[k] = true
+	}
 	for _, rec := range m.Readonly {
-		if r.writable(rec.Type) && !r.protected(rec.Key()) {
+		if r.writable(rec.Type) && !r.protected(rec.Key()) && !mixed[rec.Key()] {
 			return manifestErr("readonly_writable", "readonly.rrsets contains writable %s %s; move it to rrsets", rec.Name, rec.Type)
 		}
 	}
@@ -392,9 +406,10 @@ func groupRRsets(recs []zone.Record) *yaml.Node {
 
 func ExportManifest(account string, s zone.Snapshot, scope Scope, r Rules) ([]byte, error) {
 	sorted := s.Sorted()
+	mixed := rawKeys(sorted.Raw)
 	var write, ro []zone.Record
 	for _, rec := range sorted.Records {
-		if r.writable(rec.Type) && !r.protected(rec.Key()) {
+		if r.writable(rec.Type) && !r.protected(rec.Key()) && !mixed[rec.Key()] {
 			write = append(write, rec)
 		} else {
 			ro = append(ro, rec)
@@ -451,4 +466,12 @@ func ExportManifest(account string, s zone.Snapshot, scope Scope, r Rules) ([]by
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func rawKeys(raws []zone.Raw) map[zone.Key]bool {
+	out := map[zone.Key]bool{}
+	for _, raw := range raws {
+		out[rawKeyOf(raw.Name, raw.Type)] = true
+	}
+	return out
 }

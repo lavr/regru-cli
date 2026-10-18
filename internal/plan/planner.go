@@ -121,14 +121,15 @@ func Build(cur zone.Snapshot, want Desired, pol Policy) (Plan, error) {
 		touched[k] = true
 	}
 	if want.Scope == ScopeManaged {
+		mixed := rawKeys(cur.Raw)
 		for _, rec := range cur.Records {
-			if r.writable(rec.Type) && !r.protected(rec.Key()) {
+			if r.writable(rec.Type) && !r.protected(rec.Key()) && !mixed[rec.Key()] {
 				touched[rec.Key()] = true
 			}
 		}
 	}
 	for _, raw := range cur.Raw {
-		k := zone.Key{Name: raw.Name, Type: zone.Type(raw.Type)}
+		k := rawKeyOf(raw.Name, raw.Type)
 		if touched[k] {
 			return Plan{}, policyErr("raw_conflict", "%s %s has records that cannot be managed exactly", k.Name, k.Type)
 		}

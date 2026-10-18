@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -198,5 +199,53 @@ func TestParseReadonlyNonASCIITXT(t *testing.T) {
 	_, err = ParseManifest([]byte(head + "scope: listed-rrsets\nrrsets:\n  - {name: www, type: TXT, values: [\"café\"]}\n"))
 	if codeOf(err) != "invalid_value" {
 		t.Fatalf("desired must stay strict: %v", err)
+	}
+}
+
+func TestExportMixedRRsetThenBuildIsEmpty(t *testing.T) {
+	snap := zone.Snapshot{
+		Zone: "example.test",
+		Records: []zone.Record{
+			{Name: "www", Type: zone.A, Value: "192.0.2.1"},
+			{Name: "@", Type: zone.A, Value: "192.0.2.10"},
+		},
+		Raw: []zone.Raw{{Name: "www", Type: "A", Content: "192.0.2.2", Count: 2}},
+	}
+	for _, scope := range []Scope{ScopeListed, ScopeManaged} {
+		out, err := ExportManifest("acc", snap, scope, testRules())
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := ParseManifest(out)
+		if err != nil {
+			t.Fatalf("%s: parse: %v\n%s", scope, err, out)
+		}
+		if err := ValidateManifest(m, testRules()); err != nil {
+			t.Fatalf("%s: validate: %v\n%s", scope, err, out)
+		}
+		if _, ok := m.Desired.RRsets[zone.Key{Name: "www", Type: zone.A}]; ok {
+			t.Fatalf("%s: mixed rrset exported as writable:\n%s", scope, out)
+		}
+		if !slices.Contains(m.Readonly, zone.Record{Name: "www", Type: zone.A, Value: "192.0.2.1"}) {
+			t.Fatalf("%s: mixed rrset missing from readonly:\n%s", scope, out)
+		}
+		p, err := Build(snap, m.Desired, Policy{MaxDeletes: 10, Rules: testRules()})
+		if err != nil {
+			t.Fatalf("%s: build: %v\n%s", scope, err, out)
+		}
+		if !p.Empty() {
+			t.Fatalf("%s: plan not empty: %+v", scope, p.Ops)
+		}
+	}
+}
+
+func TestValidateReadonlyWritableWithoutRawStillRejected(t *testing.T) {
+	src := head + "scope: listed-rrsets\nrrsets: []\nreadonly:\n  rrsets:\n    - {name: www, type: A, values: [\"192.0.2.1\"]}\n  raw:\n    - {name: other, type: A, content: \"192.0.2.2\", prio: null, count: 2}\n"
+	m, err := ParseManifest([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateManifest(m, testRules()); codeOf(err) != "readonly_writable" {
+		t.Fatalf("err %v", err)
 	}
 }
