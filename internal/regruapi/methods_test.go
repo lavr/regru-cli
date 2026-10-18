@@ -242,20 +242,28 @@ func TestNop(t *testing.T) {
 }
 
 func TestIsPartnerFalse(t *testing.T) {
-	srv, _ := newServer(t, body(`{"result":"error","error_code":"RESELLER_AUTH_FAILED","error_text":"x","error_params":{}}`))
+	var path string
+	srv, _ := newServer(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.Write([]byte(`{"result":"error","error_code":"RESELLER_AUTH_FAILED","error_text":"x","error_params":{}}`))
+	})
 	c := testClient(srv.URL, newFakeClock())
 	ok, err := c.IsPartner(context.Background())
-	if err != nil || ok {
-		t.Fatalf("%v %v", ok, err)
+	if err != nil || ok || path != "/reseller_nop" {
+		t.Fatalf("%v %v %s", ok, err, path)
 	}
 }
 
 func TestIsPartnerTrue(t *testing.T) {
-	srv, _ := newServer(t, body(okResp(`{}`)))
+	var path string
+	srv, _ := newServer(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.Write([]byte(okResp(`{}`)))
+	})
 	c := testClient(srv.URL, newFakeClock())
 	ok, err := c.IsPartner(context.Background())
-	if err != nil || !ok {
-		t.Fatalf("%v %v", ok, err)
+	if err != nil || !ok || path != "/reseller_nop" {
+		t.Fatalf("%v %v %s", ok, err, path)
 	}
 }
 
@@ -387,6 +395,37 @@ func TestGetNSSFixture(t *testing.T) {
 	c := testClient(srv.URL, newFakeClock())
 	out, err := c.GetNSS(context.Background(), []string{"example.test"})
 	if err != nil || len(out) != 1 || len(out[0].NSS) != 2 || out[0].NSS[1] != "ns2.reg.ru" {
+		t.Fatalf("%+v %v", out, err)
+	}
+}
+
+func TestGetNSSStrictItems(t *testing.T) {
+	cases := map[string]string{
+		"no nss":        `{"dname":"a.example.test","service_id":"1"}`,
+		"null nss":      `{"dname":"a.example.test","service_id":"1","nss":null}`,
+		"empty nss":     `{"dname":"a.example.test","service_id":"1","nss":[]}`,
+		"no service id": `{"dname":"a.example.test","nss":[{"ns":"ns1.reg.ru"}]}`,
+		"bare item":     `{"dname":"a.example.test"}`,
+	}
+	for name, item := range cases {
+		t.Run(name, func(t *testing.T) {
+			srv, _ := newServer(t, body(okResp(`{"domains":[`+item+`]}`)))
+			c := testClient(srv.URL, newFakeClock())
+			_, err := c.GetNSS(context.Background(), []string{"a.example.test"})
+			var ie *IncompleteReadError
+			if !errors.As(err, &ie) {
+				t.Fatalf("err %v", err)
+			}
+		})
+	}
+}
+
+func TestGetNSSErrorCodeWithoutResult(t *testing.T) {
+	ans := `{"domains":[{"dname":"a.example.test","error_code":"DOMAIN_NOT_FOUND","error_text":"x","error_params":{}}]}`
+	srv, _ := newServer(t, body(okResp(ans)))
+	c := testClient(srv.URL, newFakeClock())
+	out, err := c.GetNSS(context.Background(), []string{"a.example.test"})
+	if err != nil || len(out) != 1 || out[0].Err == nil || out[0].Err.Code != "DOMAIN_NOT_FOUND" {
 		t.Fatalf("%+v %v", out, err)
 	}
 }

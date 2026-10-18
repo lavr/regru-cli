@@ -77,7 +77,7 @@ func (c *Client) Nop(ctx context.Context) (string, string, error) {
 }
 
 func (c *Client) IsPartner(ctx context.Context) (bool, error) {
-	_, err := c.Call(ctx, Read, "reseller/nop", nil)
+	_, err := c.Call(ctx, Read, "reseller_nop", nil)
 	if err == nil {
 		return true, nil
 	}
@@ -174,10 +174,12 @@ func (c *Client) getNSSBatch(ctx context.Context, domains []string) ([]DomainNSS
 		}
 		r := DomainNSS{Domain: d, ServiceID: string(it.ServiceID)}
 		switch {
-		case it.Result == "error":
+		case it.Result == "error" || it.ErrorCode != "":
 			r.Err = c.domainErr(it)
-		case it.NSS == nil:
-			return nil, &IncompleteReadError{Method: method, Reason: "domain has no nss array"}
+		case it.NSS == nil || len(*it.NSS) == 0:
+			return nil, &IncompleteReadError{Method: method, Reason: "domain has no nss"}
+		case it.ServiceID == "":
+			return nil, &IncompleteReadError{Method: method, Reason: "domain has no service_id"}
 		default:
 			r.NSS = make([]string, 0, len(*it.NSS))
 			for _, n := range *it.NSS {
