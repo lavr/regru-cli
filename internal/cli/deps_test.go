@@ -223,15 +223,6 @@ func TestAutoResolvesDiscoveredAccount(t *testing.T) {
 	}
 }
 
-func TestDiscoverStubNotImplemented(t *testing.T) {
-	d := newTestDeps(t, newFakeAPI(t))
-	writeConfig(t, d, twoAccounts)
-	code, res := probe(t, d, Target{Domain: "example.test"}, "--account", "auto")
-	if code != 2 || ToCoded(res.err).Item.Code != "auto_not_implemented" {
-		t.Fatalf("exit %d, %v", code, res.err)
-	}
-}
-
 func TestRequestTimeoutPassed(t *testing.T) {
 	d := newTestDeps(t, newFakeAPI(t))
 	writeConfig(t, d, twoAccounts+"defaults:\n  request_timeout: 7s\n")
