@@ -233,6 +233,7 @@ func newDNSApplyCmd(d *Deps) *cobra.Command {
 			)
 			if planPath != "" {
 				opts.FromStdin = planPath == "-"
+				opts.SavedPlan = true
 				b, err := readInput(st.env, planPath)
 				if err != nil {
 					return err

@@ -2,12 +2,14 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lavr/regru-cli/internal/apply"
 	"github.com/lavr/regru-cli/internal/plan"
@@ -702,5 +704,95 @@ func TestDryRunPlanVerifiedOK(t *testing.T) {
 	code, e := t13Run(t, d, "dns", "apply", "--plan", p, "--dry-run")
 	if code != 0 || e.Status != StatusSuccess || len(t13PlanOps(t, e)) != 2 || api.Mutations.Load() != 0 {
 		t.Fatalf("exit %d %+v", code, e)
+	}
+}
+
+func TestPlanDetailedExitcodeUsageErrorIsOne(t *testing.T) {
+	api := newFakeAPI(t)
+	d := newTestDeps(t, api)
+	f := t13File(t, "a.yaml", t13Manifest)
+	for _, args := range [][]string{
+		{"dns", "plan", "--file", "x", "--detailed-exitcode", "--bogus"},
+		{"dns", "plan", "--file", f, "--detailed-exitcode", "extra"},
+		{"dns", "plan", "--file", f, "--detailed-exitcode=true", "--max-deletes", "lots"},
+	} {
+		stdoutOf(d).Reset()
+		if code := Execute(append([]string{"--output", "json"}, args...), d.Env, d); code != 1 {
+			t.Fatalf("%v: exit %d", args, code)
+		}
+	}
+	if code := Execute([]string{"--output", "json", "dns", "plan", "--file", "x", "--detailed-exitcode=false", "--bogus"}, d.Env, d); code != 2 {
+		t.Fatalf("flag off: exit %d", code)
+	}
+	if code := Execute([]string{"--output", "json", "dns", "apply", "--plan", "x", "--detailed-exitcode"}, d.Env, d); code != 2 {
+		t.Fatalf("other command: exit %d", code)
+	}
+}
+
+func TestApplyEmptySavedPlanVerifiesDrift(t *testing.T) {
+	api := newFakeAPI(t)
+	d := newTestDeps(t, api)
+	p := t13Save(t, d, t13NoopManifest)
+	api.set(func(f *fakeAPI) {
+		z := f.zones["example.test"]
+		z.RRs = append(z.RRs, fakeRR{Subname: "other", Rectype: "A", Content: "192.0.2.50", Prio: intp(0)})
+	})
+	code, e := t13Run(t, d, "dns", "apply", "--plan", p, "--yes")
+	if code != 4 || !t13HasError(e, "drift") {
+		t.Fatalf("exit %d %+v", code, e)
+	}
+	if n := api.Mutations.Load(); n != 0 {
+		t.Fatalf("mutations %d", n)
+	}
+}
+
+func TestApplyEmptySavedPlanNoDriftOK(t *testing.T) {
+	api := newFakeAPI(t)
+	d := newTestDeps(t, api)
+	p := t13Save(t, d, t13NoopManifest)
+	code, e := t13Run(t, d, "dns", "apply", "--plan", p, "--yes")
+	if code != 0 || e.Status != StatusSuccess {
+		t.Fatalf("exit %d %+v", code, e)
+	}
+}
+
+type cancelOnRead struct {
+	cancel  func()
+	release chan struct{}
+}
+
+func (r *cancelOnRead) Read([]byte) (int, error) {
+	r.cancel()
+	<-r.release
+	return 0, errors.New("released")
+}
+
+func TestConfirmInterruptedByCancel(t *testing.T) {
+	api := newFakeAPI(t)
+	d := newTestDeps(t, api)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	d.BaseContext = func() context.Context { return ctx }
+	stdin := &cancelOnRead{cancel: cancel, release: make(chan struct{})}
+	defer close(stdin.release)
+	env := d.Env
+	env.Stdin = stdin
+	env.IsTTY = func() bool { return true }
+	done := make(chan int, 1)
+	go func() {
+		done <- Execute([]string{"--output", "json", "dns", "add", "example.test", "new", "A", "192.0.2.7"}, env, d)
+	}()
+	var code int
+	select {
+	case code = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("confirmation prompt ignores cancellation")
+	}
+	e := decodeOne(t, stdoutOf(d))
+	if code != 1 || e.Status != StatusFailed || !t13HasError(e, "interrupted") {
+		t.Fatalf("exit %d %+v", code, e)
+	}
+	if n := api.Mutations.Load(); n != 0 {
+		t.Fatalf("mutations %d", n)
 	}
 }

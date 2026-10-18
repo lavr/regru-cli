@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -142,12 +143,33 @@ func run(st *state, root *cobra.Command, args []string) int {
 	}
 	out := &Output{Format: format, Env: env}
 	code := out.Fail(ce, nil)
+	target, _, ferr := root.Find(args)
+	if ferr != nil || target == nil {
+		target = root
+	}
 	if format == "text" && ce.Exit == ExitUsage {
-		target, _, ferr := root.Find(args)
-		if ferr != nil || target == nil {
-			target = root
-		}
-		fmt.Fprint(env.Stderr, target.UsageString())
+		_, _ = fmt.Fprint(env.Stderr, target.UsageString())
+	}
+	if target.CommandPath() == "regru dns plan" && detailedExitcode(args) {
+		return ExitFailure
 	}
 	return code
+}
+
+func detailedExitcode(args []string) bool {
+	on := false
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		if a == "--detailed-exitcode" {
+			on = true
+			continue
+		}
+		if v, ok := strings.CutPrefix(a, "--detailed-exitcode="); ok {
+			b, err := strconv.ParseBool(v)
+			on = err != nil || b
+		}
+	}
+	return on
 }

@@ -19,7 +19,7 @@ import (
 const keepJournals = 50
 
 type FlowOpts struct {
-	Yes, DryRun, FromStdin bool
+	Yes, DryRun, FromStdin, SavedPlan bool
 
 	Deps *Deps
 	Out  *Output
@@ -182,18 +182,28 @@ func isTTY(env Env) bool {
 	return env.IsTTY != nil && env.IsTTY()
 }
 
-func confirm(env Env, v *mutPlanView) bool {
+func confirm(ctx context.Context, env Env, v *mutPlanView) (bool, error) {
 	writePlanText(env.Stderr, v)
-	fmt.Fprintf(env.Stderr, "Apply %d operations to %s? [y/N] ", len(v.Ops), v.Zone)
+	_, _ = fmt.Fprintf(env.Stderr, "Apply %d operations to %s? [y/N] ", len(v.Ops), v.Zone)
 	if env.Stdin == nil {
-		return false
+		return false, nil
 	}
-	line, _ := bufio.NewReader(env.Stdin).ReadString('\n')
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-		return true
+	answer := make(chan string, 1)
+	go func() {
+		line, _ := bufio.NewReader(env.Stdin).ReadString('\n')
+		answer <- line
+	}()
+	select {
+	case <-ctx.Done():
+		_, _ = fmt.Fprintln(env.Stderr)
+		return false, ctx.Err()
+	case line := <-answer:
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "y", "yes":
+			return true, nil
+		}
+		return false, nil
 	}
-	return false
 }
 
 func preparePlan(ctx context.Context, s *Session, b *regruzone.Backend, prepare prepareFunc) (plan.Prepared, error) {
@@ -232,6 +242,11 @@ func runFlow(ctx context.Context, s *Session, zoneName string, prepare func(cur 
 	data := mutData{Plan: pv}
 	warnings := append([]string{}, p.Plan.Warnings...)
 	if p.Plan.Empty() {
+		if opts.SavedPlan {
+			if _, err := apply.Verify(ctx, b, p, cliRules()); err != nil {
+				return failMut(o, err, data)
+			}
+		}
 		return emitMut(o, mutReport{status: StatusSuccess, exit: ExitOK, data: data, warnings: warnings})
 	}
 	if opts.DryRun {
@@ -249,7 +264,11 @@ func runFlow(ctx context.Context, s *Session, zoneName string, prepare func(cur 
 			item := ErrorItem{Code: StatusConfirmationRequired, Message: "changes require confirmation: rerun with --yes", Domain: zoneName}
 			return emitMut(o, mutReport{status: StatusConfirmationRequired, exit: ExitFailure, data: data, errs: []ErrorItem{item}, warnings: warnings})
 		}
-		if !confirm(o.Env, pv) {
+		ok, err := confirm(ctx, o.Env, pv)
+		if err != nil {
+			return failMut(o, err, data)
+		}
+		if !ok {
 			item := ErrorItem{Code: "confirmation_declined", Message: "changes were not confirmed", Domain: zoneName}
 			return emitMut(o, mutReport{status: StatusFailed, exit: ExitFailure, data: data, errs: []ErrorItem{item}, warnings: warnings})
 		}

@@ -31,6 +31,7 @@ type Deps struct {
 	Discover  func(ctx context.Context, d *Deps, domain string, fresh bool) (string, error)
 
 	OpenJournal func(stateDir, userID, zoneName, runID string) (apply.Journal, error)
+	BaseContext func() context.Context
 
 	active *Settings
 }
@@ -152,7 +153,11 @@ func (d *Deps) LoadSettings(cmd *cobra.Command) (*Settings, error) {
 }
 
 func (d *Deps) Context(s *Settings) (context.Context, context.CancelFunc) {
-	sctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	base := context.Background()
+	if d.BaseContext != nil {
+		base = d.BaseContext()
+	}
+	sctx, stop := signal.NotifyContext(base, syscall.SIGINT, syscall.SIGTERM)
 	ctx, cancel := context.WithTimeout(sctx, s.Timeout)
 	return ctx, func() {
 		cancel()
