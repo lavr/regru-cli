@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/lavr/regru-cli/internal/apply"
 	"github.com/lavr/regru-cli/internal/config"
 	"github.com/lavr/regru-cli/internal/plan"
 	"github.com/lavr/regru-cli/internal/regruapi"
@@ -33,10 +34,21 @@ func ToCoded(err error) CodedError {
 		ae  *regruapi.APIError
 		ie  *regruapi.IncompleteReadError
 		te  *regruapi.TransportError
+		se  *apply.StaleError
+		fe  *plan.FileError
+		le  *apply.LockedError
 	)
 	switch {
 	case errors.As(err, &ce):
 		return *ce
+	case errors.As(err, &se):
+		c := coded(ExitStale, se.Code, err)
+		c.Item.Details = se.Detail
+		return c
+	case errors.As(err, &fe):
+		return coded(ExitStale, fe.Code(), err)
+	case errors.As(err, &le):
+		return coded(ExitFailure, le.Code(), err)
 	case errors.As(err, &cfg):
 		return coded(ExitUsage, cfg.Code, err)
 	case errors.As(err, &ne):

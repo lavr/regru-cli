@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/lavr/regru-cli/internal/apply"
 	"github.com/lavr/regru-cli/internal/config"
 	"github.com/lavr/regru-cli/internal/regruapi"
 )
@@ -29,6 +30,8 @@ type Deps struct {
 	NewClient func(config.Account, *regruapi.Limiter, time.Duration) *regruapi.Client
 	Discover  func(ctx context.Context, d *Deps, domain string, fresh bool) (string, error)
 
+	OpenJournal func(stateDir, userID, zoneName, runID string) (apply.Journal, error)
+
 	active *Settings
 }
 
@@ -43,7 +46,17 @@ func NewDeps(env Env) *Deps {
 		Limiter:   regruapi.NewLimiter(limiterInterval, nil),
 		NewClient: defaultNewClient,
 		Discover:  Discover,
+
+		OpenJournal: openFileJournal,
 	}
+}
+
+func openFileJournal(stateDir, userID, zoneName, runID string) (apply.Journal, error) {
+	j, err := apply.OpenJournal(stateDir, userID, zoneName, runID)
+	if err != nil {
+		return nil, err
+	}
+	return j, nil
 }
 
 func defaultNewClient(a config.Account, lim *regruapi.Limiter, requestTimeout time.Duration) *regruapi.Client {
