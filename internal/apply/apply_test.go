@@ -639,16 +639,54 @@ func TestResultWriteFailsOnLastOp(t *testing.T) {
 	f := newFake()
 	p := addPrepared(t)
 	vp := verified(t, f, p)
-	r := Execute(context.Background(), f, &memJournal{failResultNo: 1}, p, vp, "run1")
-	if !slices.Equal(statuses(r), []string{"done"}) || r.Status != "success" || r.JournalErr == nil {
+	j := &memJournal{failResultNo: 1}
+	r := Execute(context.Background(), f, j, p, vp, "run1")
+	if !slices.Equal(statuses(r), []string{"done"}) || r.Status != "partial" || r.JournalErr == nil {
 		t.Fatalf("result %+v", r)
+	}
+	if j.finishStatus != "partial" {
+		t.Fatalf("finish status %q", j.finishStatus)
+	}
+}
+
+type resultFails struct{ *FileJournal }
+
+func (j resultFails) Result(plan.Op, string, string) error {
+	return errors.New("disk full")
+}
+
+func TestResultWriteFailsOnLastOpJournalNotRotated(t *testing.T) {
+	f := newFake()
+	p := addPrepared(t)
+	vp := verified(t, f, p)
+	dir := t.TempDir()
+	fj, err := OpenJournal(dir, "42", "example.test", "run1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Execute(context.Background(), f, resultFails{fj}, p, vp, "run1")
+	if r.Status != "partial" || r.JournalErr == nil {
+		t.Fatalf("result %+v", r)
+	}
+	lines := readJournal(t, fj.Path())
+	last := lines[len(lines)-1]
+	if last["event"] != "finish" || last["status"] != "partial" {
+		t.Fatalf("finish line %v", last)
+	}
+	if err := RotateJournals(journalDir(dir), 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readFile(fj.Path()); err != nil {
+		t.Fatalf("journal with a failed result write was rotated: %v", err)
 	}
 }
 
 type finishFails struct{ *FileJournal }
 
 func (j finishFails) Finish(string, any) error {
-	j.FileJournal.Close()
+	if err := j.FileJournal.Close(); err != nil {
+		return err
+	}
 	return errors.New("disk full")
 }
 
@@ -662,7 +700,7 @@ func TestFinishWriteFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := Execute(context.Background(), f, finishFails{fj}, p, vp, "run1")
-	if r.Status != "success" || r.JournalErr == nil {
+	if r.Status != "partial" || r.JournalErr == nil {
 		t.Fatalf("result %+v", r)
 	}
 	if !slices.Contains(f.snap.Records, recNew) || slices.Contains(f.snap.Records, recOld) {

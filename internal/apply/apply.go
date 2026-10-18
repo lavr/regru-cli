@@ -225,9 +225,15 @@ func Execute(ctx context.Context, b Backend, j Journal, prep plan.Prepared, p pl
 	default:
 		res.Status = RunPartial
 	}
+	if len(journalErrs) > 0 && res.Status == RunSuccess {
+		res.Status = RunPartial
+	}
 
 	if err := j.Finish(res.Status, final); err != nil {
 		journalErrs = append(journalErrs, err)
+		if res.Status == RunSuccess {
+			res.Status = RunPartial
+		}
 	}
 	res.JournalErr = errors.Join(journalErrs...)
 	return res
