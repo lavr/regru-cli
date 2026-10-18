@@ -653,3 +653,54 @@ func TestTextOutput(t *testing.T) {
 		t.Fatalf("prompt: stdout %q stderr %q", out, errOut)
 	}
 }
+
+func TestDryRunPlanDrift(t *testing.T) {
+	api := newFakeAPI(t)
+	d := newTestDeps(t, api)
+	p := t13Save(t, d, t13Manifest)
+	api.set(func(f *fakeAPI) {
+		z := f.zones["example.test"]
+		z.RRs = append(z.RRs, fakeRR{Subname: "other", Rectype: "A", Content: "192.0.2.50", Prio: intp(0)})
+	})
+	code, e := t13Run(t, d, "dns", "apply", "--plan", p, "--dry-run")
+	if code != 4 || !t13HasError(e, "drift") {
+		t.Fatalf("exit %d %+v", code, e)
+	}
+	if n := api.Mutations.Load(); n != 0 {
+		t.Fatalf("mutations %d", n)
+	}
+}
+
+func TestDryRunPlanTampered(t *testing.T) {
+	api := newFakeAPI(t)
+	d := newTestDeps(t, api)
+	p := t13Save(t, d, t13Manifest)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nb := strings.Replace(string(b), `"value": "192.0.2.1"`, `"value": "192.0.2.2"`, 1)
+	if nb == string(b) || !strings.Contains(nb, `"192.0.2.1"`) {
+		t.Fatalf("tamper did not apply to ops only: %s", nb)
+	}
+	if err := os.WriteFile(p, []byte(nb), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, e := t13Run(t, d, "dns", "apply", "--plan", p, "--dry-run")
+	if code != 4 || !t13HasError(e, "plan_mismatch") {
+		t.Fatalf("exit %d %+v", code, e)
+	}
+	if n := api.Mutations.Load(); n != 0 {
+		t.Fatalf("mutations %d", n)
+	}
+}
+
+func TestDryRunPlanVerifiedOK(t *testing.T) {
+	api := newFakeAPI(t)
+	d := newTestDeps(t, api)
+	p := t13Save(t, d, t13Manifest)
+	code, e := t13Run(t, d, "dns", "apply", "--plan", p, "--dry-run")
+	if code != 0 || e.Status != StatusSuccess || len(t13PlanOps(t, e)) != 2 || api.Mutations.Load() != 0 {
+		t.Fatalf("exit %d %+v", code, e)
+	}
+}

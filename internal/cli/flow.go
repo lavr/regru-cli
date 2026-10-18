@@ -231,8 +231,18 @@ func runFlow(ctx context.Context, s *Session, zoneName string, prepare func(cur 
 	pv := mutPlan(p)
 	data := mutData{Plan: pv}
 	warnings := append([]string{}, p.Plan.Warnings...)
-	if p.Plan.Empty() || opts.DryRun {
+	if p.Plan.Empty() {
 		return emitMut(o, mutReport{status: StatusSuccess, exit: ExitOK, data: data, warnings: warnings})
+	}
+	if opts.DryRun {
+		final, err := apply.Verify(ctx, b, p, cliRules())
+		if err != nil {
+			return failMut(o, err, data)
+		}
+		verified := p
+		verified.Plan = final
+		data.Plan = mutPlan(verified)
+		return emitMut(o, mutReport{status: StatusSuccess, exit: ExitOK, data: data, warnings: append([]string{}, final.Warnings...)})
 	}
 	if !opts.Yes {
 		if !isTTY(o.Env) || opts.FromStdin {
