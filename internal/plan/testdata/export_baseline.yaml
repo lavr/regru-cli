@@ -1,0 +1,23 @@
+apiVersion: regru-cli/v1
+kind: Zone
+account: "acc"
+zone: "example.test"
+scope: listed-rrsets
+rrsets:
+  - name: "@"
+    type: A
+    values: ["192.0.2.200"]
+  - name: "www"
+    type: A
+    values: ["192.0.2.200"]
+readonly:
+  rrsets:
+    - name: "@"
+      type: NS
+      values: ["ns1.reg.ru.", "ns2.reg.ru."]
+  raw:
+    - {name: "x", type: "HTTPS", content: "1 . alpn=h3", prio: 1, count: 1}
+    - {name: "y", type: "HTTPS", content: "0 z.example.net.", prio: null, count: 1}
+  soa:
+    ttl: 86400
+    minimum_ttl: 10800
