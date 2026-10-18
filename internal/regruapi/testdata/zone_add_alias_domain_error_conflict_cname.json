@@ -1,0 +1,44 @@
+{
+ "request": {
+  "method": "zone/add_alias",
+  "input_data": {
+   "subdomain": "c2.probe",
+   "ipaddr": "192.0.2.11",
+   "domains": [
+    {
+     "dname": "example.test"
+    }
+   ]
+  }
+ },
+ "response": {
+  "answer": {
+   "domains": [
+    {
+     "dname": "example.test",
+     "error_code": "CONFLICT_CNAME",
+     "error_params": {
+      "conflicting_records": [
+       {
+        "data": "t1.example.net.",
+        "rectype": "CNAME",
+        "subdomain": "c2.probe"
+       }
+      ],
+      "record_to_add": {
+       "data": "192.0.2.11",
+       "rectype": "A",
+       "subdomain": "c2.probe"
+      }
+     },
+     "error_text": "Can not set CNAME record together with other record for one subdomain",
+     "result": "error",
+     "service_id": "1000001"
+    }
+   ]
+  },
+  "charset": "utf-8",
+  "messagestore": null,
+  "result": "success"
+ }
+}

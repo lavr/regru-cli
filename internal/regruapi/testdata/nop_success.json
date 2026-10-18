@@ -1,0 +1,15 @@
+{
+ "request": {
+  "method": "nop",
+  "input_data": {}
+ },
+ "response": {
+  "answer": {
+   "login": "user",
+   "user_id": 1000
+  },
+  "charset": "utf-8",
+  "messagestore": null,
+  "result": "success"
+ }
+}

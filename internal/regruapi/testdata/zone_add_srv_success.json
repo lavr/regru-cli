@@ -1,0 +1,31 @@
+{
+ "request": {
+  "method": "zone/add_srv",
+  "input_data": {
+   "service": "_s1._tcp.probe",
+   "priority": "10",
+   "weight": "5",
+   "port": "5060",
+   "target": "sip.example.net.",
+   "domains": [
+    {
+     "dname": "example.test"
+    }
+   ]
+  }
+ },
+ "response": {
+  "answer": {
+   "domains": [
+    {
+     "dname": "example.test",
+     "result": "success",
+     "service_id": "1000001"
+    }
+   ]
+  },
+  "charset": "utf-8",
+  "messagestore": null,
+  "result": "success"
+ }
+}

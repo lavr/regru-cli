@@ -1,0 +1,75 @@
+{
+ "request": {
+  "method": "zone/get_resource_records",
+  "input_data": {
+   "domains": [
+    {
+     "dname": "example.test"
+    }
+   ]
+  }
+ },
+ "response": {
+  "answer": {
+   "domains": [
+    {
+     "dname": "example.test",
+     "result": "success",
+     "rrs": [
+      {
+       "content": "192.0.2.200",
+       "prio": 0,
+       "rectype": "A",
+       "state": "A",
+       "subname": "@"
+      },
+      {
+       "content": "ns1.reg.ru.",
+       "prio": 0,
+       "rectype": "NS",
+       "state": "A",
+       "subname": "@"
+      },
+      {
+       "content": "ns2.reg.ru.",
+       "prio": 1,
+       "rectype": "NS",
+       "state": "A",
+       "subname": "@"
+      },
+      {
+       "content": "192.0.2.1",
+       "prio": 0,
+       "rectype": "A",
+       "state": "A",
+       "subname": "dup.probe"
+      },
+      {
+       "content": "192.0.2.2",
+       "prio": 0,
+       "rectype": "A",
+       "state": "A",
+       "subname": "dup.probe"
+      },
+      {
+       "content": "192.0.2.200",
+       "prio": 0,
+       "rectype": "A",
+       "state": "A",
+       "subname": "www"
+      }
+     ],
+     "service_id": "1000001",
+     "servtype": "domain",
+     "soa": {
+      "minimum_ttl": "3h",
+      "ttl": "1d"
+     }
+    }
+   ]
+  },
+  "charset": "utf-8",
+  "messagestore": null,
+  "result": "success"
+ }
+}

@@ -1,0 +1,30 @@
+{
+ "request": {
+  "method": "zone/remove_record",
+  "input_data": {
+   "subdomain": "mx1.probe",
+   "record_type": "MX",
+   "priority": "10",
+   "content": "mx-a.example.net.",
+   "domains": [
+    {
+     "dname": "example.test"
+    }
+   ]
+  }
+ },
+ "response": {
+  "answer": {
+   "domains": [
+    {
+     "dname": "example.test",
+     "result": "success",
+     "service_id": "1000001"
+    }
+   ]
+  },
+  "charset": "utf-8",
+  "messagestore": null,
+  "result": "success"
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "request": {
+  "method": "zone/add_txt",
+  "input_data": {
+   "subdomain": "txt7.probe",
+   "text": "проверка regru",
+   "domains": [
+    {
+     "dname": "example.test"
+    }
+   ]
+  }
+ },
+ "response": {
+  "answer": {
+   "domains": [
+    {
+     "dname": "example.test",
+     "error_code": "TEXT_CONTAINS_INVALID_CHARACTERS",
+     "error_params": {},
+     "error_text": "Text contains invalid characters",
+     "result": "error",
+     "service_id": "1000001"
+    }
+   ]
+  },
+  "charset": "utf-8",
+  "messagestore": null,
+  "result": "success"
+ }
+}

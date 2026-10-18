@@ -1,0 +1,33 @@
+{
+ "request": {
+  "method": "domain/get_nss",
+  "input_data": {
+   "domains": [
+    {
+     "dname": "example.test"
+    }
+   ]
+  }
+ },
+ "response": {
+  "answer": {
+   "domains": [
+    {
+     "dname": "example.test",
+     "nss": [
+      {
+       "ns": "ns1.reg.ru"
+      },
+      {
+       "ns": "ns2.reg.ru"
+      }
+     ],
+     "service_id": "1000001"
+    }
+   ]
+  },
+  "charset": "utf-8",
+  "messagestore": null,
+  "result": "success"
+ }
+}

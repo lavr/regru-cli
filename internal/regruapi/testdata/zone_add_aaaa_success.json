@@ -1,0 +1,28 @@
+{
+ "request": {
+  "method": "zone/add_aaaa",
+  "input_data": {
+   "subdomain": "aaaa.probe",
+   "ipaddr": "2001:db8::1",
+   "domains": [
+    {
+     "dname": "example.test"
+    }
+   ]
+  }
+ },
+ "response": {
+  "answer": {
+   "domains": [
+    {
+     "dname": "example.test",
+     "result": "success",
+     "service_id": "1000001"
+    }
+   ]
+  },
+  "charset": "utf-8",
+  "messagestore": null,
+  "result": "success"
+ }
+}
