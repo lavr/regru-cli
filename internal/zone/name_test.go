@@ -54,3 +54,20 @@ func TestNormalizeZone(t *testing.T) {
 		t.Fatalf("got %q, %v", got, err)
 	}
 }
+
+func TestNormalizeNameAmbiguousZoneSuffix(t *testing.T) {
+	for _, in := range []string{"www.example.test", "example.test", "WWW.Example.Test", "*.example.test"} {
+		_, err := NormalizeName("example.test", in)
+		if codeOf(err) != "ambiguous_name" {
+			t.Errorf("NormalizeName(%q) err=%v want ambiguous_name", in, err)
+		}
+	}
+	got, err := NormalizeName("example.test", "www.example.test.")
+	if err != nil || got != "www" {
+		t.Fatalf("absolute name: %q, %v", got, err)
+	}
+	got, err = NormalizeName("example.test", "www.example.net")
+	if err != nil || got != "www.example.net" {
+		t.Fatalf("relative name with other suffix: %q, %v", got, err)
+	}
+}

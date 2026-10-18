@@ -101,6 +101,10 @@ func NormalizeName(zone, name string) (string, error) {
 		return "", err
 	}
 	if !absolute {
+		if n == zn || strings.HasSuffix(n, "."+zn) {
+			return "", &NameError{CodeValue: "ambiguous_name", Input: name,
+				Reason: "relative name ends with zone " + zn + "; add a trailing dot for an absolute name or drop the zone suffix"}
+		}
 		return n, nil
 	}
 	if n == zn {
