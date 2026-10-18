@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -67,6 +68,9 @@ func scanOutputFlag(args []string) (string, bool) {
 }
 
 func NewRoot(env Env, deps *Deps) *cobra.Command {
+	if deps == nil {
+		deps = NewDeps(env)
+	}
 	return newRoot(&state{env: env, deps: deps})
 }
 
@@ -99,12 +103,21 @@ func newRoot(st *state) *cobra.Command {
 	pf.DurationVar(&st.timeout, "timeout", 0, "overall timeout")
 	pf.BoolVarP(&st.verbose, "verbose", "v", false, "verbose diagnostics to stderr")
 	root.AddCommand(newVersionCmd(st))
+	addCommands(root, st.deps)
+	root.SetContext(withState(context.Background(), st))
 	return root
 }
 
 func Execute(args []string, env Env, deps *Deps) int {
+	if deps == nil {
+		deps = NewDeps(env)
+	}
 	st := &state{env: env, deps: deps}
-	root := newRoot(st)
+	return run(st, newRoot(st), args)
+}
+
+func run(st *state, root *cobra.Command, args []string) int {
+	env := st.env
 	root.SetArgs(args)
 	err := root.Execute()
 	if err == nil {
@@ -113,7 +126,8 @@ func Execute(args []string, env Env, deps *Deps) int {
 	var ce *CodedError
 	if !errors.As(err, &ce) {
 		if st.ran {
-			ce = &CodedError{Exit: ExitFailure, Item: ErrorItem{Code: "error", Message: err.Error()}}
+			c := ToCoded(err)
+			ce = &c
 		} else {
 			ce = usageError(err.Error())
 		}
