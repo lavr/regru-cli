@@ -151,6 +151,7 @@ func writeExecText(w io.Writer, v *mutExecView) {
 }
 
 func emitMut(o *Output, r mutReport) int {
+	r.warnings = o.withPending(r.warnings)
 	if o.Format == "json" {
 		o.writeJSON(Envelope{Status: r.status, Data: r.data, Errors: r.errs, Warnings: r.warnings})
 		return r.exit

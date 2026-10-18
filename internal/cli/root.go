@@ -87,7 +87,7 @@ func newRoot(st *state) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			st.output = &Output{Format: f, Env: st.env}
+			st.output = &Output{Format: f, Env: st.env, Pending: st.deps.takeWarnings}
 			return nil
 		},
 	}
@@ -141,7 +141,7 @@ func run(st *state, root *cobra.Command, args []string) int {
 			format = "json"
 		}
 	}
-	out := &Output{Format: format, Env: env}
+	out := &Output{Format: format, Env: env, Pending: st.deps.takeWarnings}
 	code := out.Fail(ce, nil)
 	target, _, ferr := root.Find(args)
 	if ferr != nil || target == nil {

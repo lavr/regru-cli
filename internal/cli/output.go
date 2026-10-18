@@ -62,8 +62,20 @@ type Env struct {
 }
 
 type Output struct {
-	Format string
-	Env    Env
+	Format  string
+	Env     Env
+	Pending func() []string
+}
+
+func (o *Output) withPending(w []string) []string {
+	if o.Pending == nil {
+		return w
+	}
+	p := o.Pending()
+	if len(p) == 0 {
+		return w
+	}
+	return append(p, w...)
 }
 
 func (o *Output) writeJSON(e Envelope) {
@@ -80,6 +92,7 @@ func (o *Output) writeJSON(e Envelope) {
 }
 
 func (o *Output) Done(status string, data any, warnings []string, text func(io.Writer)) int {
+	warnings = o.withPending(warnings)
 	if o.Format == "json" {
 		o.writeJSON(Envelope{Status: status, Data: data, Warnings: warnings})
 	} else {
@@ -108,10 +121,14 @@ func (o *Output) Fail(err error, partial any) int {
 	if ce.Exit == ExitIncomplete {
 		status = StatusPartial
 	}
+	warnings := o.withPending(nil)
 	if o.Format == "json" {
-		o.writeJSON(Envelope{Status: status, Data: partial, Errors: []ErrorItem{ce.Item}})
+		o.writeJSON(Envelope{Status: status, Data: partial, Errors: []ErrorItem{ce.Item}, Warnings: warnings})
 	} else {
-		fmt.Fprintf(o.Env.Stderr, "error: %s\n", ce.Item.Message)
+		for _, w := range warnings {
+			_, _ = fmt.Fprintf(o.Env.Stderr, "warning: %s\n", w)
+		}
+		_, _ = fmt.Fprintf(o.Env.Stderr, "error: %s\n", ce.Item.Message)
 	}
 	return ce.Exit
 }

@@ -33,7 +33,18 @@ type Deps struct {
 	OpenJournal func(stateDir, userID, zoneName, runID string) (apply.Journal, error)
 	BaseContext func() context.Context
 
-	active *Settings
+	active   *Settings
+	warnings []string
+}
+
+func (d *Deps) warn(msg string) {
+	d.warnings = append(d.warnings, msg)
+}
+
+func (d *Deps) takeWarnings() []string {
+	w := d.warnings
+	d.warnings = nil
+	return w
 }
 
 func NewDeps(env Env) *Deps {

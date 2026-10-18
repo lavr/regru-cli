@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -219,5 +220,22 @@ accounts:
 	}
 	if got := f.Accounts["a"].UsernameSHA256; got != usernameHash("user") {
 		t.Fatalf("hash %s is not of the resolved username", got)
+	}
+}
+
+func TestDiscoverCacheWriteFailureIsWarning(t *testing.T) {
+	_, d := t14Setup(t, twoAccounts)
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d.Paths.Cache = filepath.Join(blocker, "regru")
+	code := Execute([]string{"--output", "json", "--account", "auto", "dns", "get", "example.test"}, d.Env, d)
+	e := decodeOne(t, stdoutOf(d))
+	if code != 0 || e.Status != StatusSuccess {
+		t.Fatalf("exit %d %+v", code, e)
+	}
+	if len(e.Warnings) != 1 || !strings.Contains(e.Warnings[0], "discovery cache") {
+		t.Fatalf("warnings %v", e.Warnings)
 	}
 }

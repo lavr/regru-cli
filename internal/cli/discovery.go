@@ -71,21 +71,21 @@ func writeDiscoveryCache(dir string, c discoveryCache) error {
 	}
 	name := tmp.Name()
 	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		os.Remove(name)
+		_ = tmp.Close()
+		_ = os.Remove(name)
 		return err
 	}
 	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		os.Remove(name)
+		_ = tmp.Close()
+		_ = os.Remove(name)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(name)
+		_ = os.Remove(name)
 		return err
 	}
 	if err := os.Rename(name, filepath.Join(dir, "domains.json")); err != nil {
-		os.Remove(name)
+		_ = os.Remove(name)
 		return err
 	}
 	return nil
@@ -147,7 +147,9 @@ func Discover(ctx context.Context, d *Deps, domain string, fresh bool) (string, 
 	if len(failed) > 0 {
 		return "", discoveryErr("discovery_incomplete", fmt.Sprintf("could not check accounts: %s", strings.Join(failed, ", ")), domain)
 	}
-	_ = writeDiscoveryCache(d.Paths.Cache, next)
+	if err := writeDiscoveryCache(d.Paths.Cache, next); err != nil {
+		d.warn("discovery cache was not saved: " + err.Error())
+	}
 	switch len(matches) {
 	case 0:
 		return "", discoveryErr("domain_not_found", fmt.Sprintf("domain %s was not found in any configured account", target), domain)
