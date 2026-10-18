@@ -46,17 +46,54 @@ func load(t *testing.T, body string) *Config {
 }
 
 func TestPasswordLiteralRejected(t *testing.T) {
-	c := load(t, "version: 1\naccounts:\n  alpha:\n    username: a\n    password: hunter2\n")
-	_, err := c.Resolve("alpha", lk(nil), fakeFS(nil))
+	_, err := Load("/cfg/config.yaml", true, fakeFS(map[string]string{"/cfg/config.yaml": "version: 1\naccounts:\n  alpha:\n    username: a\n    password: hunter2\n"}))
 	if code(err) != "password_literal" {
 		t.Fatalf("got %v", err)
 	}
-	if err != nil && contains(err.Error(), "hunter2") {
+	if contains(err.Error(), "hunter2") {
 		t.Fatal("secret leaked")
 	}
-	c = load(t, "version: 1\naccounts:\n  alpha:\n    username: a\n    password: vault:X\n")
-	if _, err := c.Resolve("alpha", lk(nil), fakeFS(nil)); code(err) != "unknown_ref" {
+	_, err = Load("/cfg/config.yaml", true, fakeFS(map[string]string{"/cfg/config.yaml": "version: 1\naccounts:\n  alpha:\n    username: a\n    password: vault:X\n"}))
+	if code(err) != "unknown_ref" {
 		t.Fatalf("got %v", err)
+	}
+	_, err = Load("/cfg/config.yaml", true, fakeFS(map[string]string{"/cfg/config.yaml": "version: 1\naccounts:\n  alpha:\n    username: a\n"}))
+	if code(err) != "password_literal" {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestUsernameEnvRef(t *testing.T) {
+	c := load(t, "version: 1\naccounts:\n  alpha:\n    username: env:U\n    password: env:P\n    env_file: .env\n")
+	a, err := c.Resolve("alpha", lk(map[string]string{"U": "proc-user", "P": "p"}), fakeFS(map[string]string{"/cfg/.env": "U=file-user\n"}))
+	if err != nil || a.Username != "proc-user" {
+		t.Fatalf("%v %+v", err, a)
+	}
+	a, err = c.Resolve("alpha", lk(map[string]string{"P": "p"}), fakeFS(map[string]string{"/cfg/.env": "U=file-user\n"}))
+	if err != nil || a.Username != "file-user" {
+		t.Fatalf("%v %+v", err, a)
+	}
+	u, err := c.ResolveUsername("alpha", lk(nil), fakeFS(map[string]string{"/cfg/.env": "U=file-user\n"}))
+	if err != nil || u != "file-user" {
+		t.Fatalf("%v %q", err, u)
+	}
+}
+
+func TestUsernameEmptyRejected(t *testing.T) {
+	cases := []struct {
+		body string
+		env  map[string]string
+	}{
+		{"version: 1\naccounts:\n  alpha:\n    password: env:P\n", map[string]string{"P": "p"}},
+		{"version: 1\naccounts:\n  alpha:\n    username: \"\"\n    password: env:P\n", map[string]string{"P": "p"}},
+		{"version: 1\naccounts:\n  alpha:\n    username: env:U\n    password: env:P\n", map[string]string{"P": "p", "U": ""}},
+		{"version: 1\naccounts:\n  alpha:\n    username: env:U\n    password: env:P\n", map[string]string{"P": "p"}},
+	}
+	for i, tc := range cases {
+		c := load(t, tc.body)
+		if _, err := c.Resolve("alpha", lk(tc.env), fakeFS(nil)); code(err) != "missing_username" {
+			t.Fatalf("case %d: got %v", i, err)
+		}
 	}
 }
 

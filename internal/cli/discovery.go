@@ -115,8 +115,12 @@ func Discover(ctx context.Context, d *Deps, domain string, fresh bool) (string, 
 	next := discoveryCache{SchemaVersion: discoveryCacheSchema, Accounts: map[string]discoveryEntry{}}
 	var matches, failed []string
 	for _, name := range names {
-		spec := d.active.Config.Accounts[name]
-		hash := usernameHash(spec.Username)
+		username, err := d.active.Config.ResolveUsername(name, d.lookup, os.ReadFile)
+		if err != nil {
+			failed = append(failed, name)
+			continue
+		}
+		hash := usernameHash(username)
 		entry, cached := cache.Accounts[name]
 		age := now().Sub(entry.FetchedAt)
 		if cached && entry.Complete && entry.UsernameSHA256 == hash && age >= 0 && age < discoveryCacheTTL {

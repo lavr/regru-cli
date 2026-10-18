@@ -192,3 +192,32 @@ func TestDiscoverCacheFileShape(t *testing.T) {
 		t.Fatalf("%s", b)
 	}
 }
+
+func TestDiscoverCacheHashesResolvedUsername(t *testing.T) {
+	_, d := t14Setup(t, `version: 1
+default_account: a
+accounts:
+  a:
+    username: env:A_USER
+    password: env:A_PW
+`)
+	withEnv(d, "A_USER", "user")
+	if _, err := t14Discover(t, d, "example.test", true); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(d.Paths.Cache, "domains.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f struct {
+		Accounts map[string]struct {
+			UsernameSHA256 string `json:"username_sha256"`
+		} `json:"accounts"`
+	}
+	if err := json.Unmarshal(b, &f); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Accounts["a"].UsernameSHA256; got != usernameHash("user") {
+		t.Fatalf("hash %s is not of the resolved username", got)
+	}
+}

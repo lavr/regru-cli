@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -44,7 +45,7 @@ func addAccountCommands(parent *cobra.Command, d *Deps) {
 				sort.Strings(names)
 				for _, n := range names {
 					a := s.Config.Accounts[n]
-					accounts = append(accounts, accountInfo{Name: n, UsernameRef: a.Username, PasswordRef: a.Password, EnvFile: a.EnvFile})
+					accounts = append(accounts, accountInfo{Name: n, UsernameRef: a.Username, PasswordRef: passwordRef(a.Password), EnvFile: a.EnvFile})
 				}
 			}
 			st.exit = st.output.Done(StatusSuccess, map[string]any{"accounts": accounts}, nil, func(w io.Writer) {
@@ -93,4 +94,11 @@ func addAccountCommands(parent *cobra.Command, d *Deps) {
 			return nil
 		},
 	})
+}
+
+func passwordRef(s string) string {
+	if strings.HasPrefix(s, "env:") {
+		return s
+	}
+	return ""
 }

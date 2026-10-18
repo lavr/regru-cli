@@ -102,6 +102,9 @@ func Load(path string, explicit bool, readFile func(string) ([]byte, error)) (*C
 		if name == "env" || name == "auto" {
 			return nil, errf("reserved_name", "account name %q is reserved", name)
 		}
+		if err := checkPasswordRef(name, a.Password); err != nil {
+			return nil, err
+		}
 		c.Accounts[name] = AccountSpec{Name: name, Username: a.Username, Password: a.Password, EnvFile: a.EnvFile}
 	}
 	c.Defaults.MaxDeletes = raw.Defaults.MaxDeletes
@@ -114,35 +117,26 @@ func Load(path string, explicit bool, readFile func(string) ([]byte, error)) (*C
 	return c, nil
 }
 
-func (c *Config) Resolve(name string, lookup Lookup, readFile func(string) ([]byte, error)) (Account, error) {
-	spec, ok := c.Accounts[name]
-	if !ok {
-		return Account{}, errf("unknown_account", "account %q not found in config", name)
-	}
-	ref := spec.Password
-	if ref == "" {
-		return Account{}, errf("password_literal", "account %q: password must be an env:VAR reference", name)
-	}
+func checkPasswordRef(name, ref string) error {
 	varName, isEnv := strings.CutPrefix(ref, "env:")
 	if !isEnv {
-		if strings.Contains(ref, ":") && !strings.ContainsAny(ref, " \t") && isRefPrefix(ref) {
-			return Account{}, errf("unknown_ref", "account %q: unsupported password reference scheme", name)
+		if ref != "" && strings.Contains(ref, ":") && !strings.ContainsAny(ref, " \t") && isRefPrefix(ref) {
+			return errf("unknown_ref", "account %q: unsupported password reference scheme", name)
 		}
-		return Account{}, errf("password_literal", "account %q: password must be an env:VAR reference, not a literal", name)
+		return errf("password_literal", "account %q: password must be an env:VAR reference, not a literal", name)
 	}
 	if varName == "" {
-		return Account{}, errf("unknown_ref", "account %q: empty variable name in password reference", name)
+		return errf("unknown_ref", "account %q: empty variable name in password reference", name)
 	}
-	acc := Account{Name: name, Username: spec.Username}
+	return nil
+}
+
+func (c *Config) lookupVar(name string, spec AccountSpec, varName string, lookup Lookup, readFile func(string) ([]byte, error)) (string, bool, error) {
 	if v, set := lookup(varName); set {
-		if v == "" {
-			return Account{}, errf("missing_env", "account %q: variable %s is set but empty", name, varName)
-		}
-		acc.Password = v
-		return acc, nil
+		return v, true, nil
 	}
 	if spec.EnvFile == "" {
-		return Account{}, errf("missing_env", "account %q: variable %s is not set", name, varName)
+		return "", false, nil
 	}
 	home, _ := lookup("HOME")
 	p := expandHome(spec.EnvFile, home)
@@ -151,18 +145,65 @@ func (c *Config) Resolve(name string, lookup Lookup, readFile func(string) ([]by
 	}
 	b, err := readFile(p)
 	if err != nil {
-		return Account{}, errf("env_file_error", "account %q: cannot read env_file %s", name, p)
+		return "", false, errf("env_file_error", "account %q: cannot read env_file %s", name, p)
 	}
 	m, err := ParseDotenv(b)
 	if err != nil {
-		return Account{}, errf("env_file_error", "account %q: env_file %s: %v", name, p, err)
+		return "", false, errf("env_file_error", "account %q: env_file %s: %v", name, p, err)
 	}
-	v := m[varName]
+	v, ok := m[varName]
+	return v, ok, nil
+}
+
+func (c *Config) ResolveUsername(name string, lookup Lookup, readFile func(string) ([]byte, error)) (string, error) {
+	spec, ok := c.Accounts[name]
+	if !ok {
+		return "", errf("unknown_account", "account %q not found in config", name)
+	}
+	varName, isEnv := strings.CutPrefix(spec.Username, "env:")
+	if !isEnv {
+		if spec.Username == "" {
+			return "", errf("missing_username", "account %q: username is empty", name)
+		}
+		return spec.Username, nil
+	}
+	if varName == "" {
+		return "", errf("unknown_ref", "account %q: empty variable name in username reference", name)
+	}
+	v, _, err := c.lookupVar(name, spec, varName, lookup, readFile)
+	if err != nil {
+		return "", err
+	}
 	if v == "" {
-		return Account{}, errf("missing_env", "account %q: variable %s is not set or empty in env_file", name, varName)
+		return "", errf("missing_username", "account %q: username variable %s is not set or empty", name, varName)
 	}
-	acc.Password = v
-	return acc, nil
+	return v, nil
+}
+
+func (c *Config) Resolve(name string, lookup Lookup, readFile func(string) ([]byte, error)) (Account, error) {
+	spec, ok := c.Accounts[name]
+	if !ok {
+		return Account{}, errf("unknown_account", "account %q not found in config", name)
+	}
+	if err := checkPasswordRef(name, spec.Password); err != nil {
+		return Account{}, err
+	}
+	username, err := c.ResolveUsername(name, lookup, readFile)
+	if err != nil {
+		return Account{}, err
+	}
+	varName := strings.TrimPrefix(spec.Password, "env:")
+	v, set, err := c.lookupVar(name, spec, varName, lookup, readFile)
+	if err != nil {
+		return Account{}, err
+	}
+	if v == "" {
+		if set {
+			return Account{}, errf("missing_env", "account %q: variable %s is set but empty", name, varName)
+		}
+		return Account{}, errf("missing_env", "account %q: variable %s is not set", name, varName)
+	}
+	return Account{Name: name, Username: username, Password: v}, nil
 }
 
 func isRefPrefix(s string) bool {
@@ -171,7 +212,7 @@ func isRefPrefix(s string) bool {
 		return false
 	}
 	for _, r := range prefix {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' && r != '-' {
 			return false
 		}
 	}
