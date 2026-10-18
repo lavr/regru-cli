@@ -91,16 +91,30 @@ func (o *Output) writeJSON(e Envelope) {
 	_ = enc.Encode(e)
 }
 
-func (o *Output) Done(status string, data any, warnings []string, text func(io.Writer)) int {
+type textWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (t *textWriter) printf(format string, a ...any) {
+	if t.err == nil {
+		_, t.err = fmt.Fprintf(t.w, format, a...)
+	}
+}
+
+func (o *Output) Done(status string, data any, warnings []string, text func(io.Writer) error) int {
 	warnings = o.withPending(warnings)
 	if o.Format == "json" {
 		o.writeJSON(Envelope{Status: status, Data: data, Warnings: warnings})
 	} else {
 		if text != nil {
-			text(o.Env.Stdout)
+			if err := text(o.Env.Stdout); err != nil {
+				_, _ = fmt.Fprintf(o.Env.Stderr, "error: write output: %s\n", err)
+				return ExitFailure
+			}
 		}
 		for _, w := range warnings {
-			fmt.Fprintf(o.Env.Stderr, "warning: %s\n", w)
+			_, _ = fmt.Fprintf(o.Env.Stderr, "warning: %s\n", w)
 		}
 	}
 	switch status {

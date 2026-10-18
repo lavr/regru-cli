@@ -48,10 +48,12 @@ func addAccountCommands(parent *cobra.Command, d *Deps) {
 					accounts = append(accounts, accountInfo{Name: n, UsernameRef: a.Username, PasswordRef: passwordRef(a.Password), EnvFile: a.EnvFile})
 				}
 			}
-			st.exit = st.output.Done(StatusSuccess, map[string]any{"accounts": accounts}, nil, func(w io.Writer) {
+			st.exit = st.output.Done(StatusSuccess, map[string]any{"accounts": accounts}, nil, func(w io.Writer) error {
+				tw := &textWriter{w: w}
 				for _, a := range accounts {
-					fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", a.Name, a.UsernameRef, a.PasswordRef, a.EnvFile)
+					tw.printf("%s\t%s\t%s\t%s\n", a.Name, a.UsernameRef, a.PasswordRef, a.EnvFile)
 				}
+				return tw.err
 			})
 			return nil
 		},
@@ -84,12 +86,13 @@ func addAccountCommands(parent *cobra.Command, d *Deps) {
 			} else {
 				res.Partner = &partner
 			}
-			st.exit = st.output.Done(StatusSuccess, res, warnings, func(w io.Writer) {
+			st.exit = st.output.Done(StatusSuccess, res, warnings, func(w io.Writer) error {
 				p := "unknown"
 				if res.Partner != nil {
 					p = fmt.Sprint(*res.Partner)
 				}
-				fmt.Fprintf(w, "account: %s\nlogin: %s\nuser_id: %s\npartner: %s\n", res.Account, res.Login, res.UserID, p)
+				_, err := fmt.Fprintf(w, "account: %s\nlogin: %s\nuser_id: %s\npartner: %s\n", res.Account, res.Login, res.UserID, p)
+				return err
 			})
 			return nil
 		},

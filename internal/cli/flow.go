@@ -122,32 +122,32 @@ func opLabel(o mutOpView) string {
 	return fmt.Sprintf("%s %s %s %q", o.Op, o.Name, o.Type, o.Value)
 }
 
-func writePlanText(w io.Writer, v *mutPlanView) {
+func writePlanText(tw *textWriter, v *mutPlanView) {
 	if v == nil {
 		return
 	}
 	if len(v.Ops) == 0 {
-		fmt.Fprintf(w, "No changes for %s.\n", v.Zone)
+		tw.printf("No changes for %s.\n", v.Zone)
 		return
 	}
-	fmt.Fprintf(w, "Plan for %s (%d operations, %d deletes):\n", v.Zone, len(v.Ops), v.Deletes)
+	tw.printf("Plan for %s (%d operations, %d deletes):\n", v.Zone, len(v.Ops), v.Deletes)
 	for _, o := range v.Ops {
 		sign := "+"
 		if o.Op == string(plan.OpRemove) {
 			sign = "-"
 		}
-		fmt.Fprintf(w, "  %s %s %s %q\n", sign, o.Name, o.Type, o.Value)
+		tw.printf("  %s %s %s %q\n", sign, o.Name, o.Type, o.Value)
 	}
 }
 
-func writeExecText(w io.Writer, v *mutExecView) {
+func writeExecText(tw *textWriter, v *mutExecView) {
 	if v == nil {
 		return
 	}
 	for _, o := range v.Ops {
-		fmt.Fprintf(w, "  [%s] %s\n", o.Status, opLabel(o.mutOpView))
+		tw.printf("  [%s] %s\n", o.Status, opLabel(o.mutOpView))
 	}
-	fmt.Fprintf(w, "Result: %s\n", v.Status)
+	tw.printf("Result: %s\n", v.Status)
 }
 
 func emitMut(o *Output, r mutReport) int {
@@ -156,16 +156,23 @@ func emitMut(o *Output, r mutReport) int {
 		o.writeJSON(Envelope{Status: r.status, Data: r.data, Errors: r.errs, Warnings: r.warnings})
 		return r.exit
 	}
-	writePlanText(o.Env.Stdout, r.data.Plan)
-	writeExecText(o.Env.Stdout, r.data.Execution)
+	tw := &textWriter{w: o.Env.Stdout}
+	writePlanText(tw, r.data.Plan)
+	writeExecText(tw, r.data.Execution)
 	if r.data.SavedTo != "" {
-		fmt.Fprintf(o.Env.Stdout, "Plan saved to %s\n", r.data.SavedTo)
+		tw.printf("Plan saved to %s\n", r.data.SavedTo)
 	}
 	for _, w := range r.warnings {
-		fmt.Fprintf(o.Env.Stderr, "warning: %s\n", w)
+		_, _ = fmt.Fprintf(o.Env.Stderr, "warning: %s\n", w)
 	}
 	for _, e := range r.errs {
-		fmt.Fprintf(o.Env.Stderr, "error: %s\n", e.Message)
+		_, _ = fmt.Fprintf(o.Env.Stderr, "error: %s\n", e.Message)
+	}
+	if tw.err != nil {
+		_, _ = fmt.Fprintf(o.Env.Stderr, "error: write output: %s\n", tw.err)
+		if r.exit == ExitOK {
+			return ExitFailure
+		}
 	}
 	return r.exit
 }
@@ -184,7 +191,7 @@ func isTTY(env Env) bool {
 }
 
 func confirm(ctx context.Context, env Env, v *mutPlanView) (bool, error) {
-	writePlanText(env.Stderr, v)
+	writePlanText(&textWriter{w: env.Stderr}, v)
 	_, _ = fmt.Fprintf(env.Stderr, "Apply %d operations to %s? [y/N] ", len(v.Ops), v.Zone)
 	if env.Stdin == nil {
 		return false, nil
@@ -286,7 +293,9 @@ func runFlow(ctx context.Context, s *Session, zoneName string, prepare func(cur 
 	}
 	res := apply.Execute(ctx, b, j, p, final, runID)
 	if c, ok := j.(io.Closer); ok {
-		c.Close()
+		if err := c.Close(); err != nil {
+			warnings = append(warnings, "journal close failed: "+err.Error())
+		}
 	}
 	if err := apply.RotateJournals(filepath.Join(d.Paths.State, "journal", uid, zoneName), keepJournals); err != nil {
 		warnings = append(warnings, "journal rotation failed: "+err.Error())

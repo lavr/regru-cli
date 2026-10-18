@@ -37,7 +37,8 @@ func nsInfo(n regruapi.DomainNSS) domainInfo {
 	return info
 }
 
-func writeDomainText(w io.Writer, ds []domainInfo) {
+func writeDomainText(w io.Writer, ds []domainInfo) error {
+	tw := &textWriter{w: w}
 	for _, x := range ds {
 		ns, zm := "-", "-"
 		if x.NS != nil {
@@ -46,8 +47,9 @@ func writeDomainText(w io.Writer, ds []domainInfo) {
 		if x.ZoneManaged != nil {
 			zm = fmt.Sprint(*x.ZoneManaged)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", x.Domain, x.ServiceID, ns, zm)
+		tw.printf("%s\t%s\t%s\t%s\n", x.Domain, x.ServiceID, ns, zm)
 	}
+	return tw.err
 }
 
 func addDomainCommands(parent *cobra.Command, d *Deps) {
@@ -96,8 +98,8 @@ func addDomainCommands(parent *cobra.Command, d *Deps) {
 					}
 				}
 			}
-			st.exit = st.output.Done(StatusSuccess, map[string]any{"domains": infos}, nil, func(w io.Writer) {
-				writeDomainText(w, infos)
+			st.exit = st.output.Done(StatusSuccess, map[string]any{"domains": infos}, nil, func(w io.Writer) error {
+				return writeDomainText(w, infos)
 			})
 			return nil
 		},
@@ -135,8 +137,8 @@ func addDomainCommands(parent *cobra.Command, d *Deps) {
 				return nss[0].Err
 			}
 			info := nsInfo(nss[0])
-			st.exit = st.output.Done(StatusSuccess, info, nil, func(w io.Writer) {
-				writeDomainText(w, []domainInfo{info})
+			st.exit = st.output.Done(StatusSuccess, info, nil, func(w io.Writer) error {
+				return writeDomainText(w, []domainInfo{info})
 			})
 			return nil
 		},

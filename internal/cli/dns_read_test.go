@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,5 +135,21 @@ func TestIncompleteReadIsError(t *testing.T) {
 	e := decodeOne(t, stdoutOf(d))
 	if len(e.Errors) != 1 || e.Errors[0].Code != "incomplete_read" || e.Data != nil {
 		t.Fatalf("%+v", e)
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+func TestExportStdoutWriteFailureIsError(t *testing.T) {
+	d := newTestDeps(t, newFakeAPI(t))
+	env := d.Env
+	env.Stdout = failingWriter{}
+	if code := Execute([]string{"dns", "export", "example.test"}, env, d); code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(stderrOf(d).String(), "broken pipe") {
+		t.Fatalf("stderr %q", stderrOf(d).String())
 	}
 }

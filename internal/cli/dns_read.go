@@ -109,13 +109,17 @@ func addDNSReadCommands(parent *cobra.Command, d *Deps) {
 				soa = &dnsSOAJSON{TTL: snap.SOA.TTL, MinimumTTL: snap.SOA.MinimumTTL}
 			}
 			data := map[string]any{"zone": snap.Zone, "service_id": sid, "records": recs, "raw": raw, "soa": soa}
-			st.exit = st.output.Done(StatusSuccess, data, nil, func(w io.Writer) {
+			st.exit = st.output.Done(StatusSuccess, data, nil, func(w io.Writer) error {
 				tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-				fmt.Fprintln(tw, "NAME\tTYPE\tVALUE")
+				out := &textWriter{w: tw}
+				out.printf("NAME\tTYPE\tVALUE\n")
 				for _, r := range recs {
-					fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Name, r.Type, r.Value)
+					out.printf("%s\t%s\t%s\n", r.Name, r.Type, r.Value)
 				}
-				tw.Flush()
+				if out.err != nil {
+					return out.err
+				}
+				return tw.Flush()
 			})
 			return nil
 		},
@@ -144,8 +148,9 @@ func addDNSReadCommands(parent *cobra.Command, d *Deps) {
 				return err
 			}
 			if file == "" {
-				st.exit = st.output.Done(StatusSuccess, map[string]any{"manifest": string(b)}, nil, func(w io.Writer) {
-					w.Write(b)
+				st.exit = st.output.Done(StatusSuccess, map[string]any{"manifest": string(b)}, nil, func(w io.Writer) error {
+					_, err := w.Write(b)
+					return err
 				})
 				return nil
 			}
@@ -156,8 +161,9 @@ func addDNSReadCommands(parent *cobra.Command, d *Deps) {
 			for _, r := range snap.Records {
 				keys[r.Key()] = true
 			}
-			st.exit = st.output.Done(StatusSuccess, map[string]any{"file": file, "rrsets": len(keys)}, nil, func(w io.Writer) {
-				fmt.Fprintf(w, "wrote %d rrsets to %s\n", len(keys), file)
+			st.exit = st.output.Done(StatusSuccess, map[string]any{"file": file, "rrsets": len(keys)}, nil, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "wrote %d rrsets to %s\n", len(keys), file)
+				return err
 			})
 			return nil
 		},
