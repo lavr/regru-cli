@@ -30,21 +30,21 @@ func addAccountCommands(parent *cobra.Command, d *Deps) {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			st := cmdState(cmd)
-			s, err := d.LoadSettings(cmd)
+			cfg, err := d.LoadConfig(cmd)
 			if err != nil {
 				return err
 			}
 			accounts := []accountInfo{}
-			if s.Config == nil {
+			if cfg == nil {
 				accounts = append(accounts, accountInfo{Name: "env", UsernameRef: "env:REGRU_USERNAME", PasswordRef: "env:REGRU_PASSWORD"})
 			} else {
-				names := make([]string, 0, len(s.Config.Accounts))
-				for n := range s.Config.Accounts {
+				names := make([]string, 0, len(cfg.Accounts))
+				for n := range cfg.Accounts {
 					names = append(names, n)
 				}
 				sort.Strings(names)
 				for _, n := range names {
-					a := s.Config.Accounts[n]
+					a := cfg.Accounts[n]
 					accounts = append(accounts, accountInfo{Name: n, UsernameRef: a.Username, PasswordRef: passwordRef(a.Password), EnvFile: a.EnvFile})
 				}
 			}

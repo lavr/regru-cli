@@ -103,9 +103,8 @@ func (d *Deps) lookup(k string) (string, bool) {
 	return d.Env.LookupEnv(k)
 }
 
-func (d *Deps) LoadSettings(cmd *cobra.Command) (*Settings, error) {
-	flags := cmd.Flags()
-	path, _ := flags.GetString("config")
+func (d *Deps) LoadConfig(cmd *cobra.Command) (*config.Config, error) {
+	path, _ := cmd.Flags().GetString("config")
 	explicit := path != ""
 	if !explicit {
 		if v, ok := d.lookup("REGRU_CONFIG"); ok && v != "" {
@@ -115,7 +114,12 @@ func (d *Deps) LoadSettings(cmd *cobra.Command) (*Settings, error) {
 	if !explicit {
 		path = filepath.Join(d.Paths.Config, "config.yaml")
 	}
-	cfg, err := config.Load(path, explicit, os.ReadFile)
+	return config.Load(path, explicit, os.ReadFile)
+}
+
+func (d *Deps) LoadSettings(cmd *cobra.Command) (*Settings, error) {
+	flags := cmd.Flags()
+	cfg, err := d.LoadConfig(cmd)
 	if err != nil {
 		return nil, err
 	}

@@ -844,3 +844,19 @@ func TestTextWriteFailureKeepsWarnings(t *testing.T) {
 		t.Fatalf("exit %d stderr %q", code, o.Env.Stderr)
 	}
 }
+
+func TestConfirmShowsWarningsBeforePrompt(t *testing.T) {
+	d := newTestDeps(t, newFakeAPI(t))
+	if code, e := t13Run(t, d, "dns", "add", "example.test", "c", "CNAME", "a.example.net.", "--yes"); code != 0 {
+		t.Fatalf("seed: exit %d %+v", code, e)
+	}
+	code, _ := t13Exec(t, d, t13Opts{stdin: "n\n", tty: true}, "dns", "set", "example.test", "c", "CNAME", "b.example.net.")
+	if code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	s := stderrOf(d).String()
+	w, p := strings.Index(s, "remove before add"), strings.Index(s, "[y/N]")
+	if w < 0 || p < 0 || w > p {
+		t.Fatalf("warning must precede prompt: %q", s)
+	}
+}
