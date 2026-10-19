@@ -172,3 +172,33 @@ func TestUsernameEnvRefUsedForRequests(t *testing.T) {
 		t.Fatalf("%v", m)
 	}
 }
+
+func TestAccountListWithoutDefaultAccount(t *testing.T) {
+	api := newFakeAPI(t)
+	d := newTestDeps(t, api)
+	writeConfig(t, d, strings.Replace(t11Config, "default_account: a\n", "", 1))
+	if code := t11Run(d, "account", "list", "--output", "json"); code != 0 {
+		t.Fatalf("exit %d: %s", code, stdoutOf(d).String())
+	}
+	if accs := t11Data(t, d)["accounts"].([]any); len(accs) != 2 {
+		t.Fatalf("%v", accs)
+	}
+}
+
+func TestUsageOnlyForArgumentErrors(t *testing.T) {
+	d := newTestDeps(t, newFakeAPI(t))
+	writeConfig(t, d, "version: 1\ndefault_account: a\naccounts:\n  a:\n    username: user\n    password: env:NOPE\n")
+	if code := t11Run(d, "account", "check"); code != 2 {
+		t.Fatalf("exit %d", code)
+	}
+	if s := stderrOf(d).String(); !strings.Contains(s, "error:") || strings.Contains(s, "Usage:") {
+		t.Fatalf("config error: %q", s)
+	}
+	stderrOf(d).Reset()
+	if code := t11Run(d, "account", "check", "--bogus"); code != 2 {
+		t.Fatalf("exit %d", code)
+	}
+	if s := stderrOf(d).String(); !strings.Contains(s, "Usage:") {
+		t.Fatalf("flag error: %q", s)
+	}
+}
