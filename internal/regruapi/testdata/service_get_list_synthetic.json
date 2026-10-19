@@ -1,0 +1,29 @@
+{
+ "request": {
+  "method": "service/get_list",
+  "input_data": {
+   "servtype": "domain"
+  }
+ },
+ "response": {
+  "answer": {
+   "services": [
+    {
+     "dname": "example.test",
+     "service_id": "1000001",
+     "servtype": "domain",
+     "state": "A"
+    },
+    {
+     "dname": "example.net",
+     "service_id": "1000002",
+     "servtype": "domain",
+     "state": "A"
+    }
+   ]
+  },
+  "charset": "utf-8",
+  "messagestore": null,
+  "result": "success"
+ }
+}
