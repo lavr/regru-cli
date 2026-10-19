@@ -1,25 +1,25 @@
 # regru
 
-An unofficial command line tool for managing DNS zones hosted on reg.ru through the REG.API v2.
-It is not affiliated with or endorsed by reg.ru.
+Неофициальная консольная утилита для управления DNS-зонами на reg.ru через REG.API v2.
+С reg.ru не связана и им не одобрена.
 
-## Install
+## Установка
 
-The repository is private, so `go install ...@latest` does not work without extra Go proxy settings.
-Build from a checkout instead, Go 1.26 or newer:
+Репозиторий приватный, поэтому `go install ...@latest` без дополнительных настроек Go proxy не сработает.
+Собирайте из клона, нужен Go 1.26 или новее:
 
-    git clone <repository url> regru-cli
+    git clone <адрес репозитория> regru-cli
     cd regru-cli
     make build
 
-This produces `./regru`; copy it anywhere on your `PATH`.
+Получится `./regru`, скопируйте его в любой каталог из `PATH`.
 
-`make cross` builds binaries for linux and darwin on amd64 and arm64 into `dist/`.
+`make cross` собирает бинарники для linux и darwin на amd64 и arm64 в `dist/`.
 
-## Configuration
+## Настройка
 
-The config file lives at `~/.config/regru/config.yaml` (honours `XDG_CONFIG_HOME`; override with `--config`
-or `REGRU_CONFIG`). Passwords are never stored in it, only `env:` references:
+Конфиг лежит в `~/.config/regru/config.yaml` (учитывается `XDG_CONFIG_HOME`; переопределяется через `--config`
+или `REGRU_CONFIG`). Пароли в нём не хранятся, только ссылки `env:`:
 
     version: 1
     default_account: main
@@ -36,27 +36,27 @@ or `REGRU_CONFIG`). Passwords are never stored in it, only `env:` references:
       timeout: 5m
       request_timeout: 30s
 
-`password` must be an `env:VAR` reference; a literal password makes the whole config invalid (exit code 2).
-`username` is either a literal login or an `env:VAR` reference; an empty login is an error. Variables are
-looked up in the process environment first, then in `env_file`. Without a config file, the
-`REGRU_USERNAME` and `REGRU_PASSWORD` environment variables are used.
+`password` обязан быть ссылкой `env:VAR`; пароль, записанный как есть, делает весь конфиг невалидным (код выхода 2).
+`username` может быть логином как есть или ссылкой `env:VAR`; пустой логин считается ошибкой. Переменные
+ищутся сначала в окружении процесса, затем в `env_file`. Без конфига используются переменные окружения
+`REGRU_USERNAME` и `REGRU_PASSWORD`.
 
-Choose an account with `--account NAME` or `REGRU_ACCOUNT`, otherwise `default_account` is used.
-`--account auto` finds the account that owns the domain given on the command line by listing the domains
-of every configured account. The result is cached for an hour in `~/.cache/regru/domains.json`
-(`XDG_CACHE_HOME`); commands that change a zone always look the domain up again.
+Аккаунт выбирается через `--account NAME` или `REGRU_ACCOUNT`, иначе берётся `default_account`.
+`--account auto` находит аккаунт, которому принадлежит домен из командной строки, перебирая домены
+всех настроенных аккаунтов. Результат кэшируется на час в `~/.cache/regru/domains.json`
+(`XDG_CACHE_HOME`); команды, меняющие зону, всегда ищут домен заново.
 
     regru account list
     regru account check
     regru --account auto dns get example.test
 
-`account list` shows the configured accounts and their variable references, never secrets.
-`account check` logs in and prints the login, user id and whether the account is a reseller.
+`account list` показывает настроенные аккаунты и ссылки на переменные, но никогда не секреты.
+`account check` логинится и печатает логин, id пользователя и то, является ли аккаунт реселлером.
 
-Requests are rate limited to one every 3 seconds. Journals, caches and locks are kept under the XDG
-state and cache directories with owner-only permissions.
+Запросы ограничены одним в 3 секунды. Журналы, кэши и блокировки хранятся в XDG-каталогах state и cache
+с правами только для владельца.
 
-## Usage
+## Использование
 
     regru version
     regru domain list
@@ -77,55 +77,55 @@ state and cache directories with owner-only permissions.
     regru dns set example.test www A 192.0.2.10 192.0.2.11
     regru dns set example.test @ TXT --yes -- "-all"
 
-Every change is planned, shown, confirmed (or `--yes`), verified against the current zone right before
-it is sent, and checked by reading the zone afterwards. Deletions are capped by `--max-deletes`, and
-a plan that would leave a zone without writable records is refused unless `--allow-empty-zone` is given.
-The apex NS records are never changed. Removing or replacing the last writable record of a zone with
-`dns rm` or `dns set` therefore also needs `--allow-empty-zone`.
+Каждое изменение планируется, показывается, подтверждается (или `--yes`), сверяется с текущей зоной прямо
+перед отправкой и проверяется повторным чтением зоны после. Число удалений ограничено `--max-deletes`,
+а план, после которого в зоне не останется изменяемых записей, отклоняется без `--allow-empty-zone`.
+NS-записи апекса никогда не меняются. Поэтому удаление или замена последней изменяемой записи зоны через
+`dns rm` или `dns set` тоже требует `--allow-empty-zone`.
 
-Record names are relative to the zone (`www`, `@`, `_sip._tcp`, `*`). A fully qualified name needs a
-trailing dot (`www.example.test.`); a relative name that ends with the zone name is refused as ambiguous.
+Имена записей указываются относительно зоны (`www`, `@`, `_sip._tcp`, `*`). Полное имя пишется с точкой
+на конце (`www.example.test.`); относительное имя, оканчивающееся на имя зоны, отклоняется как неоднозначное.
 
-`dns rm --all-values` removes every value of the RRset as read right before planning.
+`dns rm --all-values` удаляет все значения RRset в том виде, в каком они прочитаны прямо перед планированием.
 
-A manifest has a scope. `listed-rrsets` (the default for `dns export`) only touches the RRsets listed in
-`rrsets`. `managed-zone` also removes writable records missing from the manifest. Records the tool cannot
-manage exactly (unsupported types, duplicates, an RRset that mixes normal and such records) are exported
-under `readonly` and are never changed.
+У манифеста есть scope. `listed-rrsets` (по умолчанию для `dns export`) затрагивает только RRset'ы,
+перечисленные в `rrsets`. `managed-zone` вдобавок удаляет изменяемые записи, которых нет в манифесте.
+Записи, которыми утилита не может управлять точно (неподдерживаемые типы, дубли, RRset, где смешаны обычные
+и такие записи), выгружаются в `readonly` и никогда не меняются.
 
-Each applied change is recorded in a journal, one JSON line per step, at
-`~/.local/state/regru/journal/<user_id>/<zone>/<time>-<run_id>.jsonl` (`XDG_STATE_HOME`). The 50 most
-recent completed runs per zone are kept; runs that ended partially or with an unknown outcome are never
-rotated away.
+Каждое применённое изменение пишется в журнал, по одной JSON-строке на шаг, в
+`~/.local/state/regru/journal/<user_id>/<zone>/<time>-<run_id>.jsonl` (`XDG_STATE_HOME`). Для каждой зоны
+хранятся 50 последних завершённых запусков; запуски, закончившиеся частично или с неизвестным результатом,
+при ротации не удаляются.
 
-`--output json` prints exactly one JSON document to stdout:
+`--output json` печатает в stdout ровно один JSON-документ:
 `{"schema_version":1,"status":...,"data":...,"errors":[...],"warnings":[...]}`.
 
-## Exit codes
+## Коды выхода
 
-| code | meaning |
+| код | значение |
 |---|---|
-| 0 | success or nothing to do |
-| 1 | error, API refusal, or confirmation required |
-| 2 | bad arguments or configuration |
-| 3 | partially applied, unknown outcome, or verification mismatch |
-| 4 | plan is stale or incompatible with the current zone |
+| 0 | успех или нечего делать |
+| 1 | ошибка, отказ API или нужно подтверждение |
+| 2 | неверные аргументы или конфигурация |
+| 3 | применено частично, результат неизвестен или проверка не сошлась |
+| 4 | план устарел или несовместим с текущей зоной |
 
-`dns plan --detailed-exitcode` returns 0 for no changes, 2 for changes, 1 for any error.
+`dns plan --detailed-exitcode` возвращает 0, если изменений нет, 2, если они есть, и 1 при любой ошибке.
 
-## API behavior
+## Поведение API
 
-What the API was proven to do (exact record deletion, record formats, error shapes) and the limits of
-those checks are in [docs/api-probes.md](docs/api-probes.md).
+Что API делает на самом деле (точное удаление записей, форматы записей, вид ошибок) и границы этих
+проверок описаны в [docs/api-probes.md](docs/api-probes.md).
 
-## Development
+## Разработка
 
     make test lint cross
 
-Live tests run against a real zone and are excluded from the normal build. They need an explicit opt-in:
+Live-тесты работают с настоящей зоной и в обычную сборку не входят. Их нужно включать явно:
 
     REGRU_LIVE_ZONE=<zone> REGRU_LIVE_ALLOW_WRITE=1 REGRU_USERNAME=<login> REGRU_PASSWORD=<password> \
       go test -tags live ./internal/regruzone/ -run Live -v
 
-They create and remove records only under a random `regru-live-<id>` prefix and compare the zone with its
-baseline at the end. Use a throwaway zone.
+Они создают и удаляют записи только под случайным префиксом `regru-live-<id>` и в конце сравнивают зону
+с исходным состоянием. Используйте зону, которую не жалко.
