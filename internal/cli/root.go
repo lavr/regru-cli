@@ -147,7 +147,7 @@ func run(st *state, root *cobra.Command, args []string) int {
 	if ferr != nil || target == nil {
 		target = root
 	}
-	if format == "text" && ce.Exit == ExitUsage {
+	if format == "text" && ce.Item.Code == "usage" {
 		_, _ = fmt.Fprint(env.Stderr, target.UsageString())
 	}
 	if target.CommandPath() == "regru dns plan" && detailedExitcode(args) {
