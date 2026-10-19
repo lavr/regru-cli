@@ -1,2 +1,8 @@
 /regru
 /dist/
+.env
+.env.*
+!.env.example
+secrets.env
+/docs/superpowers/
+/.superpowers/
