@@ -153,7 +153,12 @@ func writeExecText(tw *textWriter, v *mutExecView) {
 func emitMut(o *Output, r mutReport) int {
 	r.warnings = o.withPending(r.warnings)
 	if o.Format == "json" {
-		o.writeJSON(Envelope{Status: r.status, Data: r.data, Errors: r.errs, Warnings: r.warnings})
+		if err := o.writeJSON(Envelope{Status: r.status, Data: r.data, Errors: r.errs, Warnings: r.warnings}); err != nil {
+			for _, e := range r.errs {
+				_, _ = fmt.Fprintf(o.Env.Stderr, "error: %s\n", e.Message)
+			}
+			return o.writeFailed(err, r.status, r.exit)
+		}
 		return r.exit
 	}
 	tw := &textWriter{w: o.Env.Stdout}
@@ -169,10 +174,7 @@ func emitMut(o *Output, r mutReport) int {
 		_, _ = fmt.Fprintf(o.Env.Stderr, "error: %s\n", e.Message)
 	}
 	if tw.err != nil {
-		_, _ = fmt.Fprintf(o.Env.Stderr, "error: write output: %s\n", tw.err)
-		if r.exit == ExitOK {
-			return ExitFailure
-		}
+		return o.writeFailed(tw.err, r.status, r.exit)
 	}
 	return r.exit
 }

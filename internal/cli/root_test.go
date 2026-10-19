@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -115,5 +116,21 @@ func TestBadOutputValueJSONFallback(t *testing.T) {
 	e := decodeOne(t, out)
 	if len(e.Errors) == 0 || e.Errors[0].Code != "usage" {
 		t.Fatalf("envelope: %+v", e)
+	}
+}
+
+func TestBuildVersionFromModuleInfo(t *testing.T) {
+	info := &debug.BuildInfo{Main: debug.Module{Version: "v0.1.0"}, Settings: []debug.BuildSetting{
+		{Key: "vcs.revision", Value: "abc123"},
+		{Key: "vcs.time", Value: "2026-10-19T10:00:00Z"},
+	}}
+	if v, c, d := buildVersion(info, true); v != "v0.1.0" || c != "abc123" || d != "2026-10-19T10:00:00Z" {
+		t.Fatalf("%s %s %s", v, c, d)
+	}
+	if v, _, _ := buildVersion(&debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, true); v != "dev" {
+		t.Fatalf("devel: %s", v)
+	}
+	if v, c, d := buildVersion(nil, false); v != "dev" || c != "none" || d != "unknown" {
+		t.Fatalf("no info: %s %s %s", v, c, d)
 	}
 }

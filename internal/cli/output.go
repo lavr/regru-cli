@@ -78,7 +78,7 @@ func (o *Output) withPending(w []string) []string {
 	return append(p, w...)
 }
 
-func (o *Output) writeJSON(e Envelope) {
+func (o *Output) writeJSON(e Envelope) error {
 	if e.Errors == nil {
 		e.Errors = []ErrorItem{}
 	}
@@ -88,7 +88,25 @@ func (o *Output) writeJSON(e Envelope) {
 	e.SchemaVersion = SchemaVersion
 	enc := json.NewEncoder(o.Env.Stdout)
 	enc.SetEscapeHTML(false)
-	_ = enc.Encode(e)
+	return enc.Encode(e)
+}
+
+func (o *Output) writeFailed(err error, status string, exit int) int {
+	_, _ = fmt.Fprintf(o.Env.Stderr, "error: write output: %s\n", err)
+	if status == StatusSuccess {
+		return ExitFailure
+	}
+	return exit
+}
+
+func exitFor(status string) int {
+	switch status {
+	case StatusSuccess:
+		return ExitOK
+	case StatusPartial, StatusUnknown:
+		return ExitIncomplete
+	}
+	return ExitFailure
 }
 
 type textWriter struct {
@@ -104,26 +122,24 @@ func (t *textWriter) printf(format string, a ...any) {
 
 func (o *Output) Done(status string, data any, warnings []string, text func(io.Writer) error) int {
 	warnings = o.withPending(warnings)
+	exit := exitFor(status)
 	if o.Format == "json" {
-		o.writeJSON(Envelope{Status: status, Data: data, Warnings: warnings})
-	} else {
-		if text != nil {
-			if err := text(o.Env.Stdout); err != nil {
-				_, _ = fmt.Fprintf(o.Env.Stderr, "error: write output: %s\n", err)
-				return ExitFailure
-			}
+		if err := o.writeJSON(Envelope{Status: status, Data: data, Warnings: warnings}); err != nil {
+			return o.writeFailed(err, status, exit)
 		}
-		for _, w := range warnings {
-			_, _ = fmt.Fprintf(o.Env.Stderr, "warning: %s\n", w)
-		}
+		return exit
 	}
-	switch status {
-	case StatusSuccess:
-		return ExitOK
-	case StatusPartial, StatusUnknown:
-		return ExitIncomplete
+	var werr error
+	if text != nil {
+		werr = text(o.Env.Stdout)
 	}
-	return ExitFailure
+	for _, w := range warnings {
+		_, _ = fmt.Fprintf(o.Env.Stderr, "warning: %s\n", w)
+	}
+	if werr != nil {
+		return o.writeFailed(werr, status, exit)
+	}
+	return exit
 }
 
 func (o *Output) Fail(err error, partial any) int {
@@ -137,7 +153,10 @@ func (o *Output) Fail(err error, partial any) int {
 	}
 	warnings := o.withPending(nil)
 	if o.Format == "json" {
-		o.writeJSON(Envelope{Status: status, Data: partial, Errors: []ErrorItem{ce.Item}, Warnings: warnings})
+		if err := o.writeJSON(Envelope{Status: status, Data: partial, Errors: []ErrorItem{ce.Item}, Warnings: warnings}); err != nil {
+			_, _ = fmt.Fprintf(o.Env.Stderr, "error: %s\n", ce.Item.Message)
+			return o.writeFailed(err, status, ce.Exit)
+		}
 	} else {
 		for _, w := range warnings {
 			_, _ = fmt.Fprintf(o.Env.Stderr, "warning: %s\n", w)

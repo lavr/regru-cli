@@ -2,9 +2,11 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -794,5 +796,51 @@ func TestConfirmInterruptedByCancel(t *testing.T) {
 	}
 	if n := api.Mutations.Load(); n != 0 {
 		t.Fatalf("mutations %d", n)
+	}
+}
+
+func TestStdoutWriteFailureIsError(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		exit int
+	}{
+		{"version json", []string{"version", "--output", "json"}, 1},
+		{"version text", []string{"version"}, 1},
+		{"plan json", []string{"dns", "plan", "--output", "json", "--file", "M"}, 1},
+		{"plan text detailed", []string{"dns", "plan", "--detailed-exitcode", "--file", "M"}, 1},
+		{"plan json detailed", []string{"dns", "plan", "--output", "json", "--detailed-exitcode", "--file", "M"}, 1},
+		{"fail json", []string{"dns", "plan", "--output", "json", "--file", "/nonexistent/zone.yaml"}, 2},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := newTestDeps(t, newFakeAPI(t))
+			f := t13File(t, "a.yaml", t13Manifest)
+			args := append([]string{}, c.args...)
+			for i, a := range args {
+				if a == "M" {
+					args[i] = f
+				}
+			}
+			env := d.Env
+			env.Stdout = failingWriter{}
+			if code := Execute(args, env, d); code != c.exit {
+				t.Fatalf("exit %d, stderr %q", code, stderrOf(d).String())
+			}
+			if !strings.Contains(stderrOf(d).String(), "broken pipe") {
+				t.Fatalf("stderr %q", stderrOf(d).String())
+			}
+		})
+	}
+}
+
+func TestTextWriteFailureKeepsWarnings(t *testing.T) {
+	o := &Output{Env: Env{Stdout: failingWriter{}, Stderr: &bytes.Buffer{}}}
+	code := o.Done(StatusSuccess, nil, []string{"careful"}, func(w io.Writer) error {
+		_, err := io.WriteString(w, "x")
+		return err
+	})
+	if code != ExitFailure || !strings.Contains(o.Env.Stderr.(*bytes.Buffer).String(), "warning: careful") {
+		t.Fatalf("exit %d stderr %q", code, o.Env.Stderr)
 	}
 }
