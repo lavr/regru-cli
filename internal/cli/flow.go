@@ -192,8 +192,11 @@ func isTTY(env Env) bool {
 	return env.IsTTY != nil && env.IsTTY()
 }
 
-func confirm(ctx context.Context, env Env, v *mutPlanView) (bool, error) {
+func confirm(ctx context.Context, env Env, v *mutPlanView, warnings []string) (bool, error) {
 	writePlanText(&textWriter{w: env.Stderr}, v)
+	for _, w := range warnings {
+		_, _ = fmt.Fprintf(env.Stderr, "warning: %s\n", w)
+	}
 	_, _ = fmt.Fprintf(env.Stderr, "Apply %d operations to %s? [y/N] ", len(v.Ops), v.Zone)
 	if env.Stdin == nil {
 		return false, nil
@@ -274,7 +277,7 @@ func runFlow(ctx context.Context, s *Session, zoneName string, prepare func(cur 
 			item := ErrorItem{Code: StatusConfirmationRequired, Message: "changes require confirmation: rerun with --yes", Domain: zoneName}
 			return emitMut(o, mutReport{status: StatusConfirmationRequired, exit: ExitFailure, data: data, errs: []ErrorItem{item}, warnings: warnings})
 		}
-		ok, err := confirm(ctx, o.Env, pv)
+		ok, err := confirm(ctx, o.Env, pv, warnings)
 		if err != nil {
 			return failMut(o, err, data)
 		}
