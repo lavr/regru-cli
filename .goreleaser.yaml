@@ -1,0 +1,32 @@
+version: 2
+
+project_name: regru
+
+builds:
+  - main: ./cmd/regru
+    binary: regru
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/lavr/regru-cli/internal/cli.Version={{.Version}}
+      - -X github.com/lavr/regru-cli/internal/cli.Commit={{.ShortCommit}}
+      - -X github.com/lavr/regru-cli/internal/cli.Date={{.Date}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
