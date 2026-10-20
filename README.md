@@ -8,7 +8,17 @@ Linux и macOS.
 
 ## Установка
 
-Нужен Go 1.26 или новее:
+Готовые бинарники для linux и darwin (amd64, arm64) лежат в
+[релизах](https://github.com/lavr/regru-cli/releases), по одному файлу на платформу:
+
+    curl -fL -o regru https://github.com/lavr/regru-cli/releases/latest/download/regru-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+    chmod +x regru
+    sudo mv regru /usr/local/bin/
+
+Контрольные суммы в `checksums.txt` того же релиза. Если macOS не даёт запустить файл, скачанный
+через браузер, снимите карантин: `xattr -d com.apple.quarantine regru`.
+
+Через Go, нужен Go 1.26 или новее:
 
     go install github.com/lavr/regru-cli/cmd/regru@latest
 
