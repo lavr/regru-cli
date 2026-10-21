@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - run: go vet ./...
+      - run: go test ./...
+
+  create-release:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - name: Create release
+        id: create
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          API=https://api.gitverse.ru
+          REPO=lavr/regru-cli
+          AUTH="Authorization: Bearer ${RELEASE_TOKEN}"
+          ACCEPT="Accept: application/vnd.gitverse.object+json;version=1"
+
+          release_id=$(curl -sf -X POST -H "$AUTH" -H "$ACCEPT" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"${GITHUB_REF_NAME}\",\"name\":\"${GITHUB_REF_NAME}\",\"body\":\"regru ${GITHUB_REF_NAME}\"}" \
+            "$API/repos/$REPO/releases" | jq -r .id)
+
+          if [ -z "$release_id" ] || [ "$release_id" = "null" ]; then
+            echo "failed to create release" >&2
+            exit 1
+          fi
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          PKG=github.com/lavr/regru-cli/internal/cli
+          LDFLAGS="-s -w -X $PKG.Version=${GITHUB_REF_NAME#v} -X $PKG.Commit=${GITHUB_SHA::7} -X $PKG.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          go build -trimpath -ldflags "$LDFLAGS" -o "regru-${GOOS}-${GOARCH}" ./cmd/regru
+          sha256sum "regru-${GOOS}-${GOARCH}" > "regru-${GOOS}-${GOARCH}.sha256"
+
+      - name: Upload release assets
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          API=https://api.gitverse.ru
+          REPO=lavr/regru-cli
+          AUTH="Authorization: Bearer ${RELEASE_TOKEN}"
+          ACCEPT="Accept: application/vnd.gitverse.object+json;version=1"
+
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            RELEASE_ID=$(curl -sf -H "$AUTH" -H "$ACCEPT" "$API/repos/$REPO/releases" \
+              | jq -r ".[] | select(.tag_name == \"${GITHUB_REF_NAME}\") | .id" | head -1)
+          fi
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "release for ${GITHUB_REF_NAME} not found" >&2
+            exit 1
+          fi
+
+          for f in "regru-${GOOS}-${GOARCH}" "regru-${GOOS}-${GOARCH}.sha256"; do
+            curl -sf -X POST -H "$AUTH" -H "$ACCEPT" \
+              -F "attachment=@$f" \
+              "$API/repos/$REPO/releases/$RELEASE_ID/assets?name=$f" >/dev/null
+          done

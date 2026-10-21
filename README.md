@@ -184,6 +184,19 @@ NS-записи апекса никогда не меняются и в этот
 - Повторное добавление существующей A-записи ничего не меняет.
 - Лимит 1200 запросов в час; API принимает запросы только с IP из белого списка в кабинете.
 
+## Зеркало на GitVerse
+
+Репозиторий зеркалируется на [gitverse.ru/lavr/regru-cli](https://gitverse.ru/lavr/regru-cli), там же
+[релизы](https://gitverse.ru/lavr/regru-cli/releases) с теми же бинарниками и файлами `.sha256`.
+Зеркало обновляется вручную:
+
+    git remote add gitverse git@gitverse.ru:lavr/regru-cli.git
+    git push gitverse main --tags
+
+На GitVerse работают workflow из `.gitverse/workflows/`: тесты на push и сборка релиза по тегу `v*`.
+Релизу нужен секрет `RELEASE_TOKEN` с токеном «Публичное API». Статусы и логи прогонов:
+`scripts/gitverse-ci.sh runs|last|jobs <id>|logs <id>`.
+
 ## Лицензия
 
 MIT, см. [LICENSE](LICENSE).
