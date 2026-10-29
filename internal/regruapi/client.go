@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,9 +32,12 @@ type Client struct {
 	lim         *Limiter
 	baseURL     string
 	httpClient  *http.Client
+	iface       string
 	timeout     time.Duration
 	maxAttempts int
 	clock       Clock
+	hostingMu   sync.Mutex
+	hostingIDs  map[string]string
 }
 
 type Option func(*Client)
@@ -41,6 +45,8 @@ type Option func(*Client)
 func WithBaseURL(u string) Option { return func(c *Client) { c.baseURL = u } }
 
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.httpClient = h } }
+
+func WithInterface(name string) Option { return func(c *Client) { c.iface = name } }
 
 func WithRequestTimeout(d time.Duration) Option { return func(c *Client) { c.timeout = d } }
 
@@ -66,6 +72,9 @@ func New(cr Credentials, lim *Limiter, opts ...Option) *Client {
 	var hc http.Client
 	if c.httpClient != nil {
 		hc = *c.httpClient
+	}
+	if c.iface != "" && hc.Transport == nil {
+		hc.Transport = boundTransport(c.iface)
 	}
 	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirectRefused }
 	c.httpClient = &hc

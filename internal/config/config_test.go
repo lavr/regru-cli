@@ -258,3 +258,18 @@ func TestMaxDeletesZeroIsExplicit(t *testing.T) {
 		t.Fatal("expected nil")
 	}
 }
+
+func TestAccountInterface(t *testing.T) {
+	c := load(t, "version: 1\naccounts:\n  alpha:\n    username: a\n    password: env:P\n    interface: en0\n")
+	a, err := c.Resolve("alpha", lk(map[string]string{"P": "1"}), fakeFS(nil))
+	if err != nil || a.Interface != "en0" {
+		t.Fatalf("%v %+v", err, a)
+	}
+}
+
+func TestEnvModeInterface(t *testing.T) {
+	a, err := ResolveEnvMode(lk(map[string]string{"REGRU_USERNAME": "u", "REGRU_PASSWORD": "p", "REGRU_INTERFACE": "en0"}))
+	if err != nil || a.Interface != "en0" {
+		t.Fatalf("%v %+v", err, a)
+	}
+}
