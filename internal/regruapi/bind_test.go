@@ -5,7 +5,6 @@ package regruapi
 import (
 	"context"
 	"net"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -26,9 +25,6 @@ func loopbackName(t *testing.T) string {
 }
 
 func TestInterfaceBound(t *testing.T) {
-	if runtime.GOOS == "linux" {
-		t.Skip("SO_BINDTODEVICE needs CAP_NET_RAW")
-	}
 	srv, n := newServer(t, body(`{"result":"success","answer":{}}`))
 	c := testClient(srv.URL, &fakeClock{}, WithInterface(loopbackName(t)))
 	if _, err := c.Call(context.Background(), Read, "nop", nil); err != nil {
