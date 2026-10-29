@@ -24,3 +24,59 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew formula
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          sha() { awk -v f="regru-$1" '$2 == f { print $1 }' dist/checksums.txt; }
+          BASE="https://github.com/lavr/regru-cli/releases/download/${TAG}"
+
+          cat > regru.rb << FORMULA
+          class Regru < Formula
+            desc "Unofficial CLI for managing reg.ru DNS zones via REG.API v2"
+            homepage "https://github.com/lavr/regru-cli"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "${BASE}/regru-darwin-arm64"
+                sha256 "$(sha darwin-arm64)"
+              else
+                url "${BASE}/regru-darwin-amd64"
+                sha256 "$(sha darwin-amd64)"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "${BASE}/regru-linux-arm64"
+                sha256 "$(sha linux-arm64)"
+              else
+                url "${BASE}/regru-linux-amd64"
+                sha256 "$(sha linux-amd64)"
+              end
+            end
+
+            def install
+              bin.install File.basename(stable.url) => "regru"
+              chmod 0755, bin/"regru"
+              generate_completions_from_executable(bin/"regru", "completion")
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/regru version")
+            end
+          end
+          FORMULA
+          cat regru.rb
+
+          path=repos/lavr/homebrew-tap/contents/Formula/regru.rb
+          args=(--method PUT --field message="regru ${TAG}" --field content="$(base64 -w0 regru.rb)" --field branch=master)
+          if blob=$(gh api "$path" --jq .sha 2>/dev/null); then
+            args+=(--field sha="$blob")
+          fi
+          gh api "$path" "${args[@]}"

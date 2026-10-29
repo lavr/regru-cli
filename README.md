@@ -8,6 +8,12 @@ Linux и macOS.
 
 ## Установка
 
+Через Homebrew (macOS и Linux):
+
+    brew install lavr/tap/regru
+
+Обновление: `brew upgrade lavr/tap/regru`. Автодополнение для bash, zsh и fish ставится вместе с формулой.
+
 Готовые бинарники для linux и darwin (amd64, arm64) лежат в
 [релизах](https://github.com/lavr/regru-cli/releases), по одному файлу на платформу:
 
