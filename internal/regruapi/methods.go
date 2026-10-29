@@ -117,6 +117,78 @@ func (c *Client) ListDomains(ctx context.Context) ([]Service, error) {
 	return out, nil
 }
 
+func (c *Client) ListDNSHosting(ctx context.Context) ([]Service, error) {
+	const method = "service/get_list"
+	ans, err := c.Call(ctx, Read, method, map[string]any{"servtype": "srv_dns_both"})
+	if err != nil {
+		return nil, err
+	}
+	if !hasAnswer(ans) {
+		return nil, &IncompleteReadError{Method: method, Reason: "response has no answer"}
+	}
+	var a struct {
+		Services *[]struct {
+			Servtype  string     `json:"servtype"`
+			Dname     string     `json:"dname"`
+			ServiceID FlexString `json:"service_id"`
+			State     string     `json:"state"`
+		} `json:"services"`
+	}
+	if err := json.Unmarshal(ans, &a); err != nil {
+		return nil, &IncompleteReadError{Method: method, Reason: "answer is not decodable"}
+	}
+	if a.Services == nil {
+		return nil, &IncompleteReadError{Method: method, Reason: "answer has no services array"}
+	}
+	out := make([]Service, 0, len(*a.Services))
+	for _, s := range *a.Services {
+		if s.Servtype != "srv_dns_both" {
+			continue
+		}
+		out = append(out, Service{Domain: s.Dname, ServiceID: string(s.ServiceID), State: s.State})
+	}
+	return out, nil
+}
+
+func (c *Client) zoneInput(domain string) []map[string]string {
+	c.hostingMu.Lock()
+	id := c.hostingIDs[domain]
+	c.hostingMu.Unlock()
+	if id != "" {
+		return []map[string]string{{"service_id": id}}
+	}
+	return domainsInput([]string{domain})
+}
+
+func (c *Client) fallbackToHosting(ctx context.Context, domain string, err error) bool {
+	var de *DomainError
+	if !errors.As(err, &de) || de.Code != "DOMAIN_NOT_FOUND" {
+		return false
+	}
+	c.hostingMu.Lock()
+	known := c.hostingIDs[domain] != ""
+	c.hostingMu.Unlock()
+	if known {
+		return false
+	}
+	services, lerr := c.ListDNSHosting(ctx)
+	if lerr != nil {
+		return false
+	}
+	for _, s := range services {
+		if s.Domain == domain && s.ServiceID != "" {
+			c.hostingMu.Lock()
+			if c.hostingIDs == nil {
+				c.hostingIDs = map[string]string{}
+			}
+			c.hostingIDs[domain] = s.ServiceID
+			c.hostingMu.Unlock()
+			return true
+		}
+	}
+	return false
+}
+
 func domainsInput(names []string) []map[string]string {
 	ds := make([]map[string]string, 0, len(names))
 	for _, n := range names {
@@ -192,8 +264,16 @@ func (c *Client) getNSSBatch(ctx context.Context, domains []string) ([]DomainNSS
 }
 
 func (c *Client) GetResourceRecords(ctx context.Context, domain string) (ZoneRecords, error) {
+	z, err := c.getResourceRecords(ctx, domain)
+	if c.fallbackToHosting(ctx, domain, err) {
+		return c.getResourceRecords(ctx, domain)
+	}
+	return z, err
+}
+
+func (c *Client) getResourceRecords(ctx context.Context, domain string) (ZoneRecords, error) {
 	const method = "zone/get_resource_records"
-	ans, err := c.Call(ctx, Read, method, map[string]any{"domains": domainsInput([]string{domain})})
+	ans, err := c.Call(ctx, Read, method, map[string]any{"domains": c.zoneInput(domain)})
 	if err != nil {
 		return ZoneRecords{}, err
 	}
@@ -237,12 +317,20 @@ func (c *Client) ZoneMutate(ctx context.Context, fn, domain string, params map[s
 	if !zoneMutateMethods[fn] {
 		return fmt.Errorf("unsupported_method: %q", fn)
 	}
+	err := c.zoneMutate(ctx, fn, domain, params)
+	if c.fallbackToHosting(ctx, domain, err) {
+		return c.zoneMutate(ctx, fn, domain, params)
+	}
+	return err
+}
+
+func (c *Client) zoneMutate(ctx context.Context, fn, domain string, params map[string]string) error {
 	method := "zone/" + fn
 	input := make(map[string]any, len(params)+1)
 	for k, v := range params {
 		input[k] = v
 	}
-	input["domains"] = domainsInput([]string{domain})
+	input["domains"] = c.zoneInput(domain)
 	ans, err := c.Call(ctx, Mutate, method, input)
 	if err != nil {
 		return err

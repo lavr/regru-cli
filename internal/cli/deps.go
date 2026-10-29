@@ -73,7 +73,7 @@ func openFileJournal(stateDir, userID, zoneName, runID string) (apply.Journal, e
 
 func defaultNewClient(a config.Account, lim *regruapi.Limiter, requestTimeout time.Duration) *regruapi.Client {
 	return regruapi.New(regruapi.Credentials{Username: a.Username, Password: a.Password}, lim,
-		regruapi.WithRequestTimeout(requestTimeout))
+		regruapi.WithRequestTimeout(requestTimeout), regruapi.WithInterface(a.Interface))
 }
 
 type Target struct {

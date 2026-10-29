@@ -55,6 +55,7 @@ Linux и macOS.
         username: env:REGRU_USERNAME_OTHER
         password: env:REGRU_PASSWORD_OTHER
         env_file: ~/.config/regru/secrets.env
+        interface: en0
     defaults:
       max_deletes: 10
       timeout: 5m
@@ -65,6 +66,10 @@ Linux и macOS.
 ищутся сначала в окружении процесса, затем в `env_file`. Если конфига по стандартному пути нет, используются
 переменные окружения `REGRU_USERNAME` и `REGRU_PASSWORD`. Явно указанный через `--config` или `REGRU_CONFIG`
 несуществующий файл считается ошибкой.
+
+`interface` привязывает запросы аккаунта к сетевому интерфейсу (macOS и linux), например чтобы ходить в API
+мимо VPN с адреса из белого списка. В режиме без конфига то же задаёт `REGRU_INTERFACE`. На linux привязка
+требует `CAP_NET_RAW`.
 
 Аккаунт выбирается через `--account NAME` или `REGRU_ACCOUNT`, иначе берётся `default_account`.
 `--account auto` находит аккаунт, которому принадлежит домен из командной строки, перебирая домены
@@ -188,6 +193,9 @@ NS-записи апекса никогда не меняются и в этот
 - Ошибки по домену (`CONFLICT_CNAME`, `TEXT_CONTAINS_INVALID_CHARACTERS`) приходят внутри ответа
   с общим `result: success`.
 - Повторное добавление существующей A-записи ничего не меняет.
+- Зона, у которой на reg.ru только DNS-хостинг (`srv_dns_both`), а домен у другого регистратора, по имени
+  отвечает `DOMAIN_NOT_FOUND` и адресуется по `service_id`. Клиент находит такую услугу сам и повторяет
+  запрос; в `domain list` и `--account auto` она не попадает.
 - Лимит 1200 запросов в час; API принимает запросы только с IP из белого списка в кабинете.
 
 ## Лицензия

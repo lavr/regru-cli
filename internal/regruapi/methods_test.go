@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -427,5 +428,38 @@ func TestGetNSSErrorCodeWithoutResult(t *testing.T) {
 	out, err := c.GetNSS(context.Background(), []string{"a.example.test"})
 	if err != nil || len(out) != 1 || out[0].Err == nil || out[0].Err.Code != "DOMAIN_NOT_FOUND" {
 		t.Fatalf("%+v %v", out, err)
+	}
+}
+
+func TestDNSHostingFallback(t *testing.T) {
+	var inputs []string
+	srv, _ := newServer(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		in := r.URL.Path + " " + r.Form.Get("input_data")
+		inputs = append(inputs, in)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/service/get_list"):
+			_, _ = io.WriteString(w, okResp(`{"services":[{"servtype":"srv_dns_both","dname":"example.test","service_id":42,"state":"A"}]}`))
+		case strings.Contains(in, `"service_id":"42"`) && strings.HasSuffix(r.URL.Path, "/zone/get_resource_records"):
+			_, _ = io.WriteString(w, okResp(`{"domains":[{"dname":"example.test","result":"success","service_id":42,"rrs":[]}]}`))
+		case strings.Contains(in, `"service_id":"42"`):
+			_, _ = io.WriteString(w, okResp(`{"domains":[{"dname":"example.test","result":"success"}]}`))
+		default:
+			_, _ = io.WriteString(w, okResp(`{"domains":[{"dname":"example.test","result":"error","error_code":"DOMAIN_NOT_FOUND"}]}`))
+		}
+	})
+	c := testClient(srv.URL, newFakeClock())
+	z, err := c.GetResourceRecords(context.Background(), "example.test")
+	if err != nil || z.ServiceID != "42" {
+		t.Fatalf("%v %+v", err, z)
+	}
+	if err := c.ZoneMutate(context.Background(), "add_alias", "example.test", map[string]string{"subdomain": "a", "ipaddr": "192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(inputs) != 4 {
+		t.Fatalf("calls %q", inputs)
+	}
+	if !strings.Contains(inputs[1], `"servtype":"srv_dns_both"`) {
+		t.Fatalf("lookup %q", inputs[1])
 	}
 }

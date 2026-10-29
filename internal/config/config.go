@@ -27,11 +27,11 @@ type Defaults struct {
 }
 
 type AccountSpec struct {
-	Name, Username, Password, EnvFile string
+	Name, Username, Password, EnvFile, Interface string
 }
 
 type Account struct {
-	Name, Username, Password string
+	Name, Username, Password, Interface string
 }
 
 type Config struct {
@@ -43,9 +43,10 @@ type Config struct {
 }
 
 type rawAccount struct {
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	EnvFile  string `yaml:"env_file"`
+	Username  string `yaml:"username"`
+	Password  string `yaml:"password"`
+	EnvFile   string `yaml:"env_file"`
+	Interface string `yaml:"interface"`
 }
 
 type rawDefaults struct {
@@ -105,7 +106,7 @@ func Load(path string, explicit bool, readFile func(string) ([]byte, error)) (*C
 		if err := checkPasswordRef(name, a.Password); err != nil {
 			return nil, err
 		}
-		c.Accounts[name] = AccountSpec{Name: name, Username: a.Username, Password: a.Password, EnvFile: a.EnvFile}
+		c.Accounts[name] = AccountSpec{Name: name, Username: a.Username, Password: a.Password, EnvFile: a.EnvFile, Interface: a.Interface}
 	}
 	c.Defaults.MaxDeletes = raw.Defaults.MaxDeletes
 	if c.Defaults.Timeout, err = parseDuration("timeout", raw.Defaults.Timeout); err != nil {
@@ -203,7 +204,7 @@ func (c *Config) Resolve(name string, lookup Lookup, readFile func(string) ([]by
 		}
 		return Account{}, errf("missing_env", "account %q: variable %s is not set", name, varName)
 	}
-	return Account{Name: name, Username: username, Password: v}, nil
+	return Account{Name: name, Username: username, Password: v, Interface: spec.Interface}, nil
 }
 
 func isRefPrefix(s string) bool {
@@ -228,7 +229,8 @@ func ResolveEnvMode(lookup Lookup) (Account, error) {
 	if p == "" {
 		return Account{}, errf("missing_env", "REGRU_PASSWORD is not set or empty")
 	}
-	return Account{Name: "env", Username: u, Password: p}, nil
+	iface, _ := lookup("REGRU_INTERFACE")
+	return Account{Name: "env", Username: u, Password: p, Interface: iface}, nil
 }
 
 type Selection struct {
